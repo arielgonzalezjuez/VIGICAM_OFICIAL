@@ -1,0 +1,155 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vigi Cam</title>
+    <link rel="shortcut icon" href="{% static "images/favicon.ico" %}" type="image/x-icon">
+    <link rel="stylesheet" href="{% static "css/styles.css" %}" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Top Navigation Bar -->
+      <header class="top-nav">
+        <div class="logo-container" onclick="window.location.href='/'">
+          <img src="{% static 'images/logo.png' %}" class="logo-image" alt="Vigi Cam Logo">
+          <h1 class="logo-text">Vigi Cam</h1>
+        </div>
+        <div class="header-controls">
+          <div class="current-user">
+            <div class="current-user-avatar">{{ user.username.0|upper }}</div>
+            <span>{{ user.username }}</span>
+          </div>
+        </div>
+        <div class="menu-toggle" id="menuToggle">
+          <i class="ri-menu-line"></i>
+        </div>
+      </header>
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Main Area -->
+        <div class="content-area">
+          <!-- General Application Section -->
+          <div class="section">
+            <h2 class="section-title">Aplicaciones Generales</h2>
+            <div class="icon-grid">
+              <div class="icon-item" onclick="window.location.href='trabajadores/'">
+                <div class="icon-box">
+                  <i class="ri-user-search-fill"></i>
+                </div>
+                <span class="icon-label">Trabajadores</span>
+              </div>
+              <div class="icon-item" onclick="window.location.href='cameras/'">
+                <div class="icon-box">
+                  <i class="ri-camera-2-fill"></i>
+                  <a href=""></a>
+                </div>
+                <span class="icon-label">Cámaras</span>
+              </div>
+              <div class="icon-item" onclick="window.location.href='administrador/'">
+                <div class="icon-box">
+                  <i class="ri-shield-user-fill"></i>
+                  <a href="{% url "administrador" %}"></a>
+                </div>
+                <span class="icon-label">Administrador</span>
+              </div>
+            </div>
+          </div>
+          <!-- Video Application Section -->
+          <div class="section">
+            <h2 class="section-title">Aplicaciones Video</h2>
+            <div class="icon-grid">
+              <div class="icon-item" onclick="window.location.href='cameras/'">
+                <div class="icon-box">
+                  <i class="ri-eye-fill"></i>
+                </div>
+                <span class="icon-label">Iniciar Reconocimiento</span>
+              </div>
+              <div class="icon-item" onclick="window.location.href='videos/'">
+                <div class="icon-box">
+                  <i class="ri-video-fill"></i>
+                </div>
+                <span class="icon-label">Videos</span>
+              </div>
+              <div class="icon-item" onclick="window.location.href='registro/'">
+                <div class="icon-box">
+                  <i class="ri-file-chart-fill"></i>
+                </div>
+                <span class="icon-label">Reporte</span>
+              </div>
+            </div>
+          </div>
+        </div>
+<!-- Asegúrate de tener este HTML -->
+
+        <!-- Right Sidebar -->
+        <div class="right-sidebar" id="rightSidebar">
+          <h2 class="sidebar-title">Más Opciones</h2>
+          <div class="menu-items">
+            <div class="menu-item" onclick="window.location.href='{% url "trabajadores" %}?showModal=true'">
+              <i class="ri-user-add-fill"></i>
+              <span>Registrar Trabajador</span>
+            </div>
+            <div class="menu-item" onclick="window.location.href='trabajadores/'">
+              <i class="ri-team-fill"></i>
+              <span>Listar Trabajadores</span>
+            </div>
+            <div class="menu-item" onclick="openCameraModal()">
+              <img
+                src="{% static "icon/add_camera.svg" %}"
+                alt="Registrar Cámara"
+                class="custom-svg"
+              />
+              <span>Registrar Cámara</span>
+            </div>
+            <div class="menu-item" onclick="window.location.href='cameras/'">
+              <i class="ri-camera-2-fill"></i>
+              <span>Listar Cámaras</span>
+            </div>
+            <div class="menu-item" onclick="window.location.href='{% url 'administrador' %}?showAddModal=true'">     
+              <i class="ri-admin-fill"></i>              
+              <span>Registrar Administrador</span>
+            </div>
+            <div class="menu-item" onclick="window.location.href='{% url "about" %}'">
+              <i class="ri-information-fill"></i>             
+              <span>Acerca de Nosotros</span>
+            </div>           
+          </div>
+        </div>
+      </div>
+
+      <footer class="bottom-bar">
+        <div class="status-left">
+          <div class="alert-icon" onclick="window.location.href='cerrar-session/'">
+            <i class="ri-logout-box-line"></i>
+          </div>
+        </div>
+        <div class="status-right">
+          <i class="ri-whatsapp-fill"></i>
+          <i class="ri-facebook-fill"></i>
+        </div>
+      </footer>
+    </div>
+    <div class="overlay" id="overlay"></div>
+    <script src="{% static "js/script.js" %}"></script>
+   <!-- En tu index.html -->
+<script>
+  function openCameraModal() {
+    // Usar la URL generada por Django
+    const camerasUrl = "{% url 'cameras' %}"; 
+
+    if (!window.location.href.includes("cameras")) {
+      window.location.href = `${camerasUrl}?showModal=true`; // URL correcta: /cameras/?showModal=true
+    } else {
+      const modal = document.getElementById("addCameraModal");
+      if (modal) modal.style.display = "flex";
+    }
+  }
+</script>
+  </body>
+</html>

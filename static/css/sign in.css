@@ -1,0 +1,329 @@
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  background-color: #111827;
+  color: white;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  align-items: center;
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* 3D Visualization */
+.visualization {
+  display: none;
+  position: relative;
+  justify-content: center;
+  align-items: center;
+}
+
+@media (min-width: 1024px) {
+  .visualization {
+    display: flex;
+  }
+}
+
+.cylinder {
+  width: 384px;
+  height: 384px;
+  position: relative;
+}
+
+.cylinder-inner {
+  position: absolute;
+  inset: 0;
+  background: 
+    /* Imagen de fondo con opacidad */ linear-gradient(
+      rgba(31, 41, 55, 0.7),
+      rgba(31, 41, 55, 0.7)
+    ),
+    /* URL de la imagen (ejemplo abstracto) */
+      url("https://images.unsplash.com/photo-1639762681057-408e52192e55?q=80&w=1000")
+      center/cover,
+    /* Degradado base del cilindro */
+      linear-gradient(to bottom, #1f2937, #374151);
+
+  border-radius: 50%;
+  transform: perspective(1000px) rotateZ(45deg);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.cylinder-inner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Refuerza el efecto 3D con un brillo sutil */
+  background: linear-gradient(
+    to top right,
+    rgba(59, 130, 246, 0.2),
+    transparent
+  );
+  border-radius: 50%;
+}
+
+/* Floating icons */
+.floating-icon {
+  position: absolute;
+  padding: 1rem;
+}
+
+.icon-wrapper {
+  padding: 1rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-left {
+  top: 0;
+  left: 0;
+  transform: translate(-48px, -48px);
+}
+
+.top-right {
+  top: 0;
+  right: 0;
+  transform: translate(48px, -48px);
+}
+
+.bottom-left {
+  bottom: 0;
+  left: 0;
+  transform: translate(-48px, 48px);
+}
+
+.bottom-right {
+  bottom: 0;
+  right: 0;
+  transform: translate(48px, 48px);
+}
+
+.middle-right {
+  bottom: 50%;
+  right: 0;
+  transform: translateX(64px);
+}
+
+.blue {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.orange {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+}
+
+.gray {
+  background-color: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+}
+
+.red {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.green {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+/* Login Form */
+.login-form {
+  background-color: #1f2937;
+  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 448px;
+  margin: 0 auto;
+}
+
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.form-header h1 {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.language-select {
+  background-color: transparent;
+  color: #9ca3af;
+  border: none;
+  outline: none;
+  cursor: pointer;
+}
+
+.language-select:focus {
+  ring: 2px solid #3b82f6;
+}
+
+.close-button {
+  color: #9ca3af;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  transition: color 0.2s;
+}
+
+.close-button:hover {
+  color: white;
+}
+
+/* Form Content */
+.info-message {
+  color: #ef4444;
+  font-size: 1.125rem;
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: #374151;
+  border: none;
+  border-radius: 0.5rem;
+  color: white;
+  outline: none;
+}
+
+input[type="text"]::placeholder,
+input[type="password"]::placeholder {
+  color: #9ca3af;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+.password-group {
+  position: relative;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.toggle-password:hover {
+  color: white;
+}
+
+.hidden {
+  display: none;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+input[type="checkbox"] {
+  border-radius: 0.25rem;
+  background-color: #374151;
+  border: none;
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+input[type="checkbox"]:checked {
+  background-color: #3b82f6;
+}
+
+.checkbox-group label {
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.login-button {
+  width: 100%;
+  padding: 0.75rem;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 1rem;
+}
+
+.login-button:hover {
+  background-color: #dc2626;
+}
+
+.footer-text {
+  color: #6b7280;
+  font-size: 0.875rem;
+  text-align: center;
+  margin-top: 1.5rem;
+}
+
+.footer-text a {
+  color: white;
+  font-size: 0.875rem;
+  text-align: center;
+  margin-top: 1.5rem;
+  text-decoration: none;
+}
+
+.btnRegistrar {
+  text-decoration: none;
+  color: white;
+}

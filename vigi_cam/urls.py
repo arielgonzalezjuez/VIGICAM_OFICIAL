@@ -1,0 +1,33 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.index, name='index'),
+    path('about', views.about, name='about'),
+    path('trabajadores/', views.trabajadores, name='trabajadores'),
+    path('administrador/', views.administrador, name='administrador'),
+    path('cameras/', views.cameras, name='cameras'),
+    path('login/', views.inicio_sesion, name='login'),  
+    path('registrarAdminFirstTime/', views.registrarAdminFirstTime, name='registrarAdminFirstTime'),
+    path('registrarAdmin/', views.registrar_admin, name='registrarAdmin'),
+    path('editarAdmin/<int:admin_id>/', views.editar_admin, name='editarAdmin'),
+    path('eliminarAdmin/<int:id_administrador>/', views.eliminar_administrador, name='eliminarAdmin'),
+    path('buscarAdmin/', views.buscar_admin, name='buscarAdmin'),
+    path('cerrar-session/',views.cerrarSession, name='cerrarSession'),
+    path('trabajadores/', views.trabajadores, name='lista_personas'),
+    path('registrar_persona/', views.registrar_persona, name='registrar_persona'),
+    path('editar_persona/<int:id_persona>/', views.editar_persona, name='editar_persona'),
+    path('eliminar_persona/<int:id_persona>/', views.eliminar_persona, name='eliminar_persona'),
+     
+    path('reconocimiento/add/', views.registrar_camara, name='registrar_camara'),
+    path('reconocimiento/edit/<int:id_camara>/', views.editar_camara, name='editar_camara'),
+    path('reconocimiento/delete/<int:id_camara>/', views.eliminar_camara, name='eliminar_camara'),
+    path('reconocimiento/', views.reconocimiento_facial, name='reconocimiento_facial'),
+    path('capturavideo/<int:camera_id>/', views.video_feed, name='capturavideo'),
+    path('registro/', views.registro, name='registro'),
+    path('eliminarregistros/', views.eliminarregistros, name='eliminarregistros'),
+    path('eliminarregistro/<int:id_registro>/', views.eliminar_registro, name='eliminarregistro'),
+    path('videos/', views.videos, name='videos'),
+      path('eliminar-video/', views.eliminar_video, name='eliminar_video'),
+    path('eliminar-videos/', views.eliminar_videos, name='eliminar_videos'),
+]
