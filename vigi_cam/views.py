@@ -697,7 +697,7 @@ def get_rtsp_url(ip, port, user, password):
         print(f"Error obteniendo RTSP: {str(e)}")
         return None
 
-# Función principal modificada
+# Función principal modificada|
 def robust_video_gen(camera_id=None):
     """Generador principal para cámaras IP"""
     cap = None
