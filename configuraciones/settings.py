@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'vigi_cam',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [

@@ -55,6 +55,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 import face_recognition
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 def index(request):
     return render(request, 'index.html')
@@ -270,7 +273,8 @@ def cerrarSession(request):
     return redirect('login')
 
 # Vista para manejar la lista de personas y el registro de cámaras
-@login_required
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def trabajadores(request):
     personas = Persona.objects.all().order_by('nombre')
     return render(request, 'trabajadores.html', {'personas': personas})
