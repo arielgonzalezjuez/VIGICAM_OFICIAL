@@ -1,3 +1,4 @@
+# Importaciones de Django y utilidades
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Persona, RegistroAcceso, Camara, Video,Cliente, HorarioEmpresa
 from .forms import PersonaForm, CamaraForm
@@ -59,6 +60,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+
+# ------------------------- AUTENTICACIÓN Y USUARIOS -------------------------
+
+
+
 # # Vista para autenticación de usuarios (administradores)
 # Maneja tanto GET (muestra formulario) como POST (procesa credenciales)
 # - Valida las credenciales con el sistema de autenticación de Django
@@ -84,6 +90,10 @@ def inicio_sesion(request):
 def cerrarSession(request):
     logout(request) 
     return redirect('login')
+
+
+# ------------------------- VISTAS PRINCIPALES -------------------------
+
 
 # Vista principal del sistema (dashboard)
 # - Punto de entrada después del login exitoso
@@ -517,8 +527,13 @@ def eliminar_videos(request):
 
 # Fin Trabajo con videos
 
-# Inicio de la funcion Reconocimiento Facial y Otros 
 
+# ------------------------- RECONOCIMIENTO FACIAL -------------------------
+#  
+
+# ------------------------- CONSTANTES Y CONFIGURACIÓN -------------------------
+
+# Configuración para el procesamiento de video
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
 MIN_FACE_SIZE = 80
@@ -527,8 +542,10 @@ CONFIDENCE_THRESHOLD = 0.7
 RECOGNITION_THRESHOLD = 100
 FRAME_SKIP = 1
 
+# ------------------------- FUNCIONES AUXILIARES -------------------------
+
 def load_dnn_detector():
-    """Carga el modelo de detección facial"""
+    """Carga el modelo de detección facial DNN"""
     net = cv2.dnn.readNetFromCaffe(
         os.path.join(settings.BASE_DIR, 'models', 'deploy.prototxt'),
         os.path.join(settings.BASE_DIR, 'models', 'res10_300x300_ssd_iter_140000.caffemodel')
@@ -536,7 +553,7 @@ def load_dnn_detector():
     return net
 
 def improved_face_detection(frame, net):
-    """Detección mejorada de rostros"""
+    """Realiza detección de rostros mejorada usando DNN"""
     (h, w) = frame.shape[:2]
     blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0, 
                                (300, 300), (104.0, 177.0, 123.0))
@@ -558,7 +575,7 @@ def improved_face_detection(frame, net):
     return valid_faces
 
 def train_recognizer(dnn_net):
-    """Entrenamiento del reconocedor facial"""
+    """Entrena el reconocedor facial con las imágenes de las personas registradas"""
     personas = Persona.objects.all()
     if not personas:
         return None, None
@@ -604,7 +621,7 @@ def train_recognizer(dnn_net):
     return None, None
 
 def enhanced_recognizer_predict(recognizer, face_img, label_map):
-    """Predicción mejorada con diagnóstico"""
+    """Realiza predicción mejorada con diagnóstico"""
     try:
         face_img = cv2.resize(face_img, (200, 200))
         face_img = cv2.equalizeHist(face_img)
@@ -621,7 +638,7 @@ def enhanced_recognizer_predict(recognizer, face_img, label_map):
         return "Desconocido", 100, (0, 0, 255)
 
 def verify_media_dirs():
-    """Verifica y crea los directorios necesarios con permisos"""
+    """Verifica y crea los directorios necesarios para almacenamiento"""
     try:
         os.makedirs(os.path.join(settings.MEDIA_ROOT, 'imagenes_capturadas'), mode=0o777, exist_ok=True)
         os.makedirs(os.path.join(settings.MEDIA_ROOT, 'videos_capturados'), mode=0o777, exist_ok=True)
@@ -633,17 +650,21 @@ def verify_media_dirs():
         return False
 
 def error_frame(message):
-    """Genera un frame de error"""
+    """Genera un frame de error para mostrar en el stream de video"""
     frame = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
     cv2.putText(frame, message, (10, 30), 
                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
     ret, jpeg = cv2.imencode('.jpg', frame)
     return jpeg.tobytes()
 
+
+# ------------------------- MANEJO DE NOTIFICACIONES -------------------------
+
 notification_timers = defaultdict(dict)
 notification_lock = threading.Lock()
 
 def schedule_telegram_notification(camera_name, absolute_path, mensaje):
+    """Programa notificaciones a Telegram con temporizador para evitar spam"""
     with notification_lock:
         # Cancelar temporizador existente
         if camera_name in notification_timers:
@@ -668,7 +689,7 @@ def schedule_telegram_notification(camera_name, absolute_path, mensaje):
         }
 
 def send_telegram_notification(absolute_path, mensaje, camera_name):
-    """Envia la notificación y actualiza el estado"""
+    """Envía la notificación a Telegram y actualiza el estado"""
     try:
         if os.path.exists(absolute_path):
             success = enviar_foto_telegram(absolute_path, mensaje)
@@ -684,7 +705,7 @@ def send_telegram_notification(absolute_path, mensaje, camera_name):
         print(f"Error enviando notificación: {str(e)}")
 
 def save_and_notify_face(frame, face_roi, nombre, conf,camera_name):
-    """Guarda la imagen detectada y envía notificación"""
+    """Guarda la imagen detectada y envía notificación si es necesario"""
     try:
         # Crear directorio si no existe
         img_dir = os.path.join(settings.MEDIA_ROOT, 'imagenes_capturadas')
@@ -770,6 +791,8 @@ def save_and_notify_face(frame, face_roi, nombre, conf,camera_name):
         print(f"Error al guardar/notificar rostro: {str(e)}")
         return False
 
+# ------------------------- MANEJO DE CÁMARAS IP -------------------------
+
 def get_rtsp_url(ip, port, user, password):
     """Obtiene la URL RTSP con autenticación usando ONVIF"""
     try:
@@ -809,9 +832,10 @@ def get_rtsp_url(ip, port, user, password):
         print(f"Error obteniendo RTSP: {str(e)}")
         return None
 
-# Función principal 
+# ------------------------- GENERADOR PRINCIPAL DE VIDEO -------------------------
+
 def robust_video_gen(camera_id=None):
-    """Generador principal para cámaras IP"""
+    """Generador principal para el streaming de cámaras IP con reconocimiento facial"""
     cap = None
     out = None
     try:
@@ -956,9 +980,10 @@ def robust_video_gen(camera_id=None):
         if cap:
             cap.release()
 
-# Vista final
+# ------------------------- VISTA FINAL DE VIDEO FEED -------------------------
+
 def video_feed(request, camera_id):
-    """Endpoint principal del video feed"""
+    """Endpoint principal para el streaming de video con reconocimiento facial"""
     try:
         return StreamingHttpResponse(
             robust_video_gen(camera_id),
