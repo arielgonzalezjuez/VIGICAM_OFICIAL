@@ -59,10 +59,40 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+# # Vista para autenticación de usuarios (administradores)
+# Maneja tanto GET (muestra formulario) como POST (procesa credenciales)
+# - Valida las credenciales con el sistema de autenticación de Django
+# - En caso de éxito: inicia sesión y redirige al dashboard (index)
+# - En caso de error: vuelve a mostrar el formulario con mensaje de error
+# Utiliza el AuthenticationForm integrado de Django para el formulario de login
+def inicio_sesion(request):
+    if request.method == 'GET':
+        return render(request, 'sign in.html', {'form':AuthenticationForm})
+    else:
+        cliente = authenticate(request,username=request.POST['username'], password=request.POST['password'])
+        if cliente is None:
+            return render(request, 'sign in.html', {'form':AuthenticationForm, 'error':'Usuario o contraseña incorrectos'})
+        else:
+            login(request,cliente)
+            return redirect('index')
+
+# Vista para cerrar sesión (protegida por @login_required)
+# - Invalida la sesión actual usando el sistema de autenticación de Django
+# - Redirige al usuario a la página de login
+# Requiere que el usuario esté autenticado para acceder
+@login_required
+def cerrarSession(request):
+    logout(request) 
+    return redirect('login')
+
+# Vista principal del sistema (dashboard)
+# - Punto de entrada después del login exitoso
+# - Renderiza la plantilla index.html con el contexto básico
+# - No requiere lógica adicional ya que es una vista estática inicial
 def index(request):
     return render(request, 'index.html')
 
-
+# Controla la página "Acerca de", gestionando los horarios laborales (crea defaults si no existen, permite edición para staff y agrupa días con mismos horarios) y mostrando la información organizada al usuario, renderizando 'about.html' con los horarios agrupados e individuales.
 @login_required
 def about(request):
     if not HorarioEmpresa.objects.exists():
@@ -161,23 +191,15 @@ def about(request):
         'horarios': horarios_ordenados      
     })
 
-def inicio_sesion(request):
-    if request.method == 'GET':
-        return render(request, 'sign in.html', {'form':AuthenticationForm})
-    else:
-        cliente = authenticate(request,username=request.POST['username'], password=request.POST['password'])
-        if cliente is None:
-            return render(request, 'sign in.html', {'form':AuthenticationForm, 'error':'Usuario o contraseña incorrectos'})
-        else:
-            login(request,cliente)
-            return redirect('index')
-        
-@login_required
-def cerrarSession(request):
-    logout(request) 
-    return redirect('login')
 
-# Inicio de Trabajo con los Administradores
+
+
+# ==================== GESTIÓN DE ADMINISTRADORES ====================
+
+# Vista para gestión de administradores
+# - Lista todos los usuarios administradores ordenados por username
+# - Utiliza el modelo Cliente (asumiendo que hereda de User)
+# - Renderiza plantilla 'administrador.html' con lista de administradores
 @login_required
 def administrador(request):
     administradores = Cliente.objects.all().order_by('username')
@@ -227,7 +249,11 @@ def registrar_admin(request):
         'administradores': administradores
     })
 
-
+# Vista para edición de administradores (vía AJAX/POST)
+# - Busca admin por ID (devuelve error 404 si no existe)
+# - Valida: username requerido, único y password (si se provee) >= 8 chars
+# - Actualiza username y password (este último con encriptación)
+# - Retorna JSON con éxito/error para procesamiento frontend
 @require_POST
 def editar_admin(request, admin_id):
     try:
@@ -254,7 +280,10 @@ def editar_admin(request, admin_id):
     admin.save()
     return JsonResponse({'success': True})
 
-
+# Vista para eliminar administradores (POST-only)
+# - Elimina admin por ID usando get_object_or_404
+# - Maneja errores y retorna JSON apropiado
+# - Protegida por decorador @require_POST para seguridad
 @require_POST
 def eliminar_administrador(request, id_administrador):
     try:
@@ -264,7 +293,10 @@ def eliminar_administrador(request, id_administrador):
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'Error al eliminar: {str(e)}'})
 
-
+# Vista para búsqueda de administradores (GET-only)
+# - Busca admins por coincidencia parcial en username (case-insensitive)
+# - Retorna JSON con lista de IDs y usernames
+# - Limitada a método GET por seguridad (@require_http_methods)
 @require_http_methods(["GET"])
 def buscar_admin(request):
     q = request.GET.get('q', '').strip()
@@ -276,15 +308,25 @@ def buscar_admin(request):
 
 
 
-# Inicio de Trabajo con los Trabajadores
 
-# Vista para manejar la lista de personas y el registro de cámaras
+# ==================== GESTIÓN DE TRABAJADORES ====================
+
+# Vista para listado de trabajadores (API REST con autenticación)
+# - Requiere autenticación JWT (IsAuthenticated)
+# - Solo acepta método GET (@api_view decorator)
+# - Retorna todos los registros de Persona ordenados por nombre
+# - Renderiza plantilla 'trabajadores.html' con lista de personas
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def trabajadores(request):
     personas = Persona.objects.all().order_by('nombre')
     return render(request, 'trabajadores.html', {'personas': personas})
 
+# Vista para registro de nuevas personas (protegida por login)
+# - Maneja tanto GET (muestra formulario vacío) como POST (procesa datos)
+# - Valida datos con PersonaForm incluyendo archivos adjuntos (FILES)
+# - Redirige al listado de trabajadores tras registro exitoso
+# - Reutiliza plantilla 'trabajadores.html' para formulario de registro
 @login_required
 def registrar_persona(request):
     title = 'Registrar Persona'
@@ -297,6 +339,11 @@ def registrar_persona(request):
         form = PersonaForm()
     return render(request, 'trabajadores.html', {'form': form, 'title': title})
 
+# Vista para edición de personas existentes (protegida por login)
+# - Recibe id_persona como parámetro (404 si no existe)
+# - Maneja GET (formulario precargado) y POST (actualización)
+# - Usa PersonaForm con instancia existente para updates
+# - Mantiene consistencia en redirección y plantillas
 @login_required
 def editar_persona(request, id_persona):
     title = 'Editar Persona'
@@ -310,6 +357,10 @@ def editar_persona(request, id_persona):
         form = PersonaForm(instance=persona)
     return render(request, 'trabajadores.html', {'form': form, 'persona': persona, 'title': title})
 
+# Vista para eliminación de personas (protegida por login)
+# - Elimina registro por id_persona (404 si no existe)
+# - Redirección inmediata sin confirmación (considerar implementar modal)
+# - Operación irreversible - considerar soft delete en futuras versiones
 @login_required
 def eliminar_persona(request, id_persona):
     persona = get_object_or_404(Persona, pk=id_persona)
@@ -318,30 +369,53 @@ def eliminar_persona(request, id_persona):
 
 # Fin de Trabajo con los Trabajadores
 
-# Inicia el Trabajo con los registros de la camara
+# ==================== REGISTROS DE ACCESO ====================
+
+# Vista para listado de registros de acceso
+# - Muestra todos los registros ordenados por fecha descendente
+# - No requiere autenticación (considerar agregar @login_required)
+# - Renderiza plantilla 'registro.html' con los registros
 @login_required
 def registro(request):
      registros = RegistroAcceso.objects.all().order_by('-fecha_hora')
      return render(request, 'registro.html', {'registros': registros})
 
+# Vista para eliminar un registro específico
+# - Requiere autenticación (@login_required)
+# - Elimina registro por ID (404 si no existe)
+# - Redirige al listado de registros
 @login_required
 def eliminar_registro(request, id_registro):
     registro = get_object_or_404(RegistroAcceso, pk=id_registro)
     registro.delete()
     return redirect('registro')
 
+# Vista para eliminar TODOS los registros
+# - Requiere autenticación (@login_required)
+# - Elimina todos los registros sin confirmación (considerar implementar confirmación)
+# - Redirige al listado de registros
 @login_required
 def eliminarregistros(request):
      RegistroAcceso.objects.all().delete()
      return redirect('registro')
 # Finaliza el Trabajo con los registros de la camara
 
-# Inicio Trabajo con Camaras
+
+
+# ==================== GESTIÓN DE CÁMARAS ====================
+
+# Vista para listado de cámaras
+# - Muestra todas las cámaras ordenadas por nombre
+# - Renderiza plantilla 'reconocimiento.html' con el listado
 def cameras(request):
     camaras = Camara.objects.all().order_by('nombreC')
     return render(request, 'reconocimiento.html',{'camaras': camaras})
 
-
+# Vista para registrar nueva cámara (POST-only)
+# - Requiere autenticación (@login_required)
+# - Valida datos con CamaraForm
+# - Soporta AJAX (retorna JSON) y requests normales (redirección)
+# - Maneja errores de validación apropiadamente
 @login_required
 @require_POST
 def registrar_camara(request):
@@ -356,6 +430,11 @@ def registrar_camara(request):
             return JsonResponse({'status': 'error', 'errors': form.errors}, status=400)
         return render(request, 'reconocimiento.html', {'form': form, 'errors': form.errors})
 
+# Vista para editar cámara existente (POST-only)
+# - Requiere autenticación (@login_required)
+# - Actualiza cámara por ID (404 si no existe)
+# - Soporta solo AJAX (retorna JSON)
+# - Maneja errores de validación con códigos HTTP apropiados
 @login_required
 @require_POST
 def editar_camara(request, id_camara):
@@ -368,7 +447,11 @@ def editar_camara(request, id_camara):
         return redirect('cameras')
     else:
         return JsonResponse({'status': 'error', 'errors': form.errors}, status=400)
-    
+
+# Vista para eliminar cámara
+# - Requiere autenticación (@login_required)
+# - Elimina cámara por ID (maneja errores)
+# - Retorna JSON con estado de la operación
 @login_required
 def eliminar_camara(request, id_camara):
     camara = get_object_or_404(Camara, pk=id_camara)
@@ -378,7 +461,10 @@ def eliminar_camara(request, id_camara):
     except Exception as e:
         return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
 
-
+# Vista para reconocimiento facial
+# - Requiere autenticación (@login_required)
+# - Muestra todas las cámaras disponibles
+# - Renderiza plantilla 'reconocimiento.html'
 @login_required
 def reconocimiento_facial(request):
      cameras = Camara.objects.all()
@@ -387,7 +473,14 @@ def reconocimiento_facial(request):
 # Fin Trabajo con camaras
 
 
-# Inicio Trabajo con videos
+
+
+# ==================== GESTIÓN DE VIDEOS ====================
+
+# Vista para listado de videos
+# - Muestra todos los videos disponibles
+# - Calcula conteo total de videos
+# - Renderiza plantilla 'videos.html' con listado y conteo
 def videos(request):
     videos = Video.objects.all()
     count = 0
@@ -396,6 +489,10 @@ def videos(request):
         print(video.title)
     return render(request, 'videos.html', {'videos': videos, "count":count})
 
+# Vista para eliminar videos seleccionados (AJAX-only)
+# - Requiere método GET (@require_GET)
+# - Elimina videos por lista de IDs (separados por comas)
+# - Retorna JSON con estado de la operación
 @require_GET
 def eliminar_video(request):
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -408,6 +505,10 @@ def eliminar_video(request):
             return JsonResponse({'success': False, 'error': str(e)})
     return JsonResponse({'success': False, 'error': 'Invalid request'})
 
+# Vista para eliminar TODOS los videos
+# - Requiere método GET (considerar cambiarlo a POST)
+# - Elimina todos los videos sin confirmación
+# - Muestra mensaje flash y redirige al listado
 def eliminar_videos(request):
     if request.method == 'GET':
         Video.objects.all().delete()
@@ -708,7 +809,7 @@ def get_rtsp_url(ip, port, user, password):
         print(f"Error obteniendo RTSP: {str(e)}")
         return None
 
-# Función principal modificada|
+# Función principal 
 def robust_video_gen(camera_id=None):
     """Generador principal para cámaras IP"""
     cap = None
