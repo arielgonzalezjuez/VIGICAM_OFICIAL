@@ -62,6 +62,7 @@ from rest_framework.response import Response
 def index(request):
     return render(request, 'index.html')
 
+
 @login_required
 def about(request):
     if not HorarioEmpresa.objects.exists():
@@ -170,7 +171,13 @@ def inicio_sesion(request):
         else:
             login(request,cliente)
             return redirect('index')
+        
+@login_required
+def cerrarSession(request):
+    logout(request) 
+    return redirect('login')
 
+# Inicio de Trabajo con los Administradores
 @login_required
 def administrador(request):
     administradores = Cliente.objects.all().order_by('username')
@@ -265,12 +272,11 @@ def buscar_admin(request):
     data = [{'id': a.id, 'username': a.username} for a in admins]
     return JsonResponse({'administradores': data})
 
+# Fin de Trabajo con los Administradores
 
 
-@login_required
-def cerrarSession(request):
-    logout(request) 
-    return redirect('login')
+
+# Inicio de Trabajo con los Trabajadores
 
 # Vista para manejar la lista de personas y el registro de cámaras
 @api_view(['GET'])
@@ -310,6 +316,8 @@ def eliminar_persona(request, id_persona):
     persona.delete()
     return redirect('trabajadores')
 
+# Fin de Trabajo con los Trabajadores
+
 # Inicia el Trabajo con los registros de la camara
 @login_required
 def registro(request):
@@ -328,11 +336,7 @@ def eliminarregistros(request):
      return redirect('registro')
 # Finaliza el Trabajo con los registros de la camara
 
-def reconocimiento(request):
-    return render(request, 'reconocimiento.html')
-
 # Inicio Trabajo con Camaras
-
 def cameras(request):
     camaras = Camara.objects.all().order_by('nombreC')
     return render(request, 'reconocimiento.html',{'camaras': camaras})
@@ -411,6 +415,9 @@ def eliminar_videos(request):
         return redirect('videos')
 
 # Fin Trabajo con videos
+
+# Inicio de la funcion Reconocimiento Facial y Otros 
+
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
 MIN_FACE_SIZE = 80
@@ -848,7 +855,7 @@ def robust_video_gen(camera_id=None):
         if cap:
             cap.release()
 
-# Vista final (igual que antes)
+# Vista final
 def video_feed(request, camera_id):
     """Endpoint principal del video feed"""
     try:
@@ -862,7 +869,10 @@ def video_feed(request, camera_id):
             iter([error_frame("Error inicializando cámara")]),
             content_type='multipart/x-mixed-replace; boundary=frame'
         )
-    
+
+# Fin de la funcion Reconocimiento Facial y Otros 
+
+
 # Configuración de rendimiento (se mantiene igual)
 # FRAME_WIDTH = 640
 # FRAME_HEIGHT = 480

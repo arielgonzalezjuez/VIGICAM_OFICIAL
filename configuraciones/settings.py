@@ -140,3 +140,14 @@ LOGIN_URL = 'login'
 
 TELEGRAM_BOT_TOKEN = '7795369706:AAFXnZX7SL7zYrjjCWOszsaLp0sTgSWAklM'
 TELEGRAM_CHAT_ID = '-1002575792253'
+
+# settings.py
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
