@@ -1,5 +1,3 @@
-# ultimo
-
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Persona, RegistroAcceso, Camara, Video,Cliente, HorarioEmpresa
 from .forms import PersonaForm, CamaraForm
