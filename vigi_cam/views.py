@@ -1037,7 +1037,7 @@ MIN_FACE_SIZE = 30  # Reducido para detectar rostros más pequeños
 SCALE_FACTOR = 1.01  # Más preciso para rostros pequeños
 TARGET_FPS = 10
 CONFIDENCE_THRESHOLD = 0.6  # Umbral más bajo
-RECOGNITION_THRESHOLD = 90
+RECOGNITION_THRESHOLD = 100
 FRAME_SKIP = 1
 
 def load_dnn_detector():
