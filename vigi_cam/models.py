@@ -92,6 +92,7 @@ class RegistroAcceso(models.Model):
 class Cliente(AbstractUser):
       direccion = models.CharField(max_length=200)
       telefono = models.CharField(max_length=20)
+      telegram_chat_id = models.CharField(max_length=50, blank=True, null=True,verbose_name="Chat ID de Telegram") 
       
       def __str__(self):
           return self.first_name

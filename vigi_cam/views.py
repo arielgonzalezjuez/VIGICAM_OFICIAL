@@ -1,7 +1,7 @@
 # Importaciones de Django y utilidades
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Persona, RegistroAcceso, Camara, Video,Cliente, HorarioEmpresa
-from .forms import PersonaForm, CamaraForm
+from .forms import *
 from django.http import StreamingHttpResponse
 import numpy as np
 from django.core.files.base import ContentFile
@@ -113,27 +113,26 @@ def about(request):
             'JUE': ('08:00', '18:00', False),
             'VIE': ('08:00', '18:00', False),
             'SAB': ('09:00', '14:00', False),
-            'DOM': (None, None, True)
+            'DOM': ('00:00', '00:00', True)
         }
         
         for dia, (apertura, cierre, cerrado) in default_hours.items():
             HorarioEmpresa.objects.create(
                 dia=dia,
-                abre=datetime.strptime(apertura, '%H:%M').time() if apertura else None,
-                cierra=datetime.strptime(cierre, '%H:%M').time() if cierre else None,
+                abre=datetime.strptime(apertura, '%H:%M').time() if not cerrado else None,
+                cierra=datetime.strptime(cierre, '%H:%M').time() if not cerrado else None,
                 cerrado=cerrado
             )
-    
-    horarios = HorarioEmpresa.objects.all()
     
     # Diccionario para orden personalizado
     dia_order = {'LUN': 0, 'MAR': 1, 'MIE': 2, 'JUE': 3, 'VIE': 4, 'SAB': 5, 'DOM': 6}
     
+    # Ordenar los horarios según el orden de la semana
+    horarios = HorarioEmpresa.objects.all()
+    horarios_ordenados = sorted(horarios, key=lambda x: dia_order[x.dia])
+    
     grouped_horarios = []
     current_group = None
-    
-    # Ordenar los horarios según el orden de la semana
-    horarios_ordenados = sorted(horarios, key=lambda x: dia_order[x.dia])
     
     for horario in horarios_ordenados:
         if current_group is None:
@@ -146,10 +145,15 @@ def about(request):
                 'cerrado': horario.cerrado
             }
         else:
-            if (horario.abre == current_group['abre'] and 
-                horario.cierra == current_group['cierra'] and 
-                horario.cerrado == current_group['cerrado']):
+            # Comparación segura que maneja None
+            same_schedule = (
+                (horario.abre == current_group['abre'] or 
+                 (horario.abre is None and current_group['abre'] is None)) and \
+                (horario.cierra == current_group['cierra'] or 
+                 (horario.cierra is None and current_group['cierra'] is None)) and \
+                (horario.cerrado == current_group['cerrado']))
                 
+            if same_schedule:
                 current_group['dias'].append(horario)
                 current_group['last_day_name'] = horario.get_dia_display()
             else:
@@ -166,40 +170,80 @@ def about(request):
     if current_group is not None:
         grouped_horarios.append(current_group)
     
-    if request.method == 'POST' and request.user.is_staff:
-        for dia in ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']:
-            horario = HorarioEmpresa.objects.get(dia=dia)
-            prefix = f"horario_{dia}"
+    if request.method == 'POST' and request.user.is_authenticated:
+        if 'horario_LUN_cerrado' in request.POST:  # Asumiendo que es el formulario de horarios
+            for dia in ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']:
+                horario = HorarioEmpresa.objects.get(dia=dia)
+                prefix = f"horario_{dia}"
             
-            cerrado = f"{prefix}_cerrado" in request.POST
+                cerrado = f"{prefix}_cerrado" in request.POST
             
-            if cerrado:
-                horario.cerrado = True
-                horario.abre = None
-                horario.cierra = None
-            else:
-                hora_apertura = request.POST.get(f"{prefix}_abre")
-                hora_cierre = request.POST.get(f"{prefix}_cierra")
+                if cerrado:
+                    horario.cerrado = True
+                    horario.abre = None
+                    horario.cierra = None
+                else:
+                    hora_apertura = request.POST.get(f"{prefix}_abre", '08:00')
+                    hora_cierre = request.POST.get(f"{prefix}_cierra", '18:00')
                 
-                horario.cerrado = False
-                horario.abre = datetime.strptime(hora_apertura, '%H:%M').time() if hora_apertura else None
-                horario.cierra = datetime.strptime(hora_cierre, '%H:%M').time() if hora_cierre else None
+                    horario.cerrado = False
+                    horario.abre = datetime.strptime(hora_apertura, '%H:%M').time()
+                    horario.cierra = datetime.strptime(hora_cierre, '%H:%M').time()
             
-            horario.actualizado_por = request.user
-            horario.save()
-        
-        return redirect('about')
+                horario.actualizado_por = request.user
+                horario.save()
+            
+            return redirect('about')
+        elif 'telegram_form' in request.POST:
+            telegram_form = TelegramForm(request.POST, instance=request.user)
+            if telegram_form.is_valid():
+                telegram_form.save()
+                return redirect('about')
+            show_telegram_form = True
+        elif 'edit_telegram' in request.POST:
+            show_telegram_form = True
+            telegram_form = TelegramForm(instance=request.user)
+    else:
+        telegram_form = TelegramForm(instance=request.user)
+        show_telegram_form = False
     
-    horarios_individuales = HorarioEmpresa.objects.all().order_by('dia')
-    
-    # Para debug - verifica qué estás enviando a la plantilla
-    print("Horarios agrupados:", grouped_horarios)
-    print("Horarios individuales:", list(horarios_individuales.values('dia', 'abre', 'cierra', 'cerrado'))) 
-
     return render(request, 'about.html', {
-        'grouped_horarios': grouped_horarios,  
-        'horarios': horarios_ordenados      
+        'grouped_horarios': grouped_horarios,
+        'horarios': horarios_ordenados,
+        'telegram_form': telegram_form,
+        'show_telegram_form': show_telegram_form,
+        'is_authenticated': request.user.is_authenticated
     })
+
+def inicio_sesion(request):
+    if request.method == 'GET':
+        return render(request, 'sign in.html', {'form':AuthenticationForm})
+    else:
+        cliente = authenticate(request,username=request.POST['username'], password=request.POST['password'])
+        if cliente is None:
+            return render(request, 'sign in.html', {'form':AuthenticationForm, 'error':'Usuario o contraseña incorrectos'})
+        else:
+            login(request,cliente)
+            return redirect('index')
+
+@login_required
+def administrador(request):
+    administradores = Cliente.objects.all().order_by('username')
+    return render(request, 'administrador.html',{'administradores':administradores})
+
+def registrarAdminFirstTime(request):
+    if request.method == 'GET':
+        return render(request, 'sign_up.html', {'form': UserCreationForm})
+    else:
+        if request.POST['password1'] == request.POST['password2']:
+            try:
+                user = User.objects.create_user(username=request.POST['username'], password=request.POST['password1'])
+                user.save()
+                login(request,user)
+                return redirect('index')
+            except IntegrityError:
+                return render(request, 'sign_up.html', {'form': UserCreationForm, 'error':'Usuario ya existente'})
+        return render(request, 'sign_up.html', {'form': UserCreationForm, 'error':'Contraseñas Incorrectas'})
 
 
 
@@ -548,475 +592,38 @@ from onvif.exceptions import ONVIFError
 import requests
 from requests.adapters import HTTPAdapter, Retry
 
-# Configuración mejorada para detección a distancia
-import os
-import cv2
-import numpy as np
-import threading
-from datetime import datetime, timedelta
-from collections import defaultdict
-from urllib.parse import urlparse
-import requests
-from requests.adapters import HTTPAdapter, Retry
-from onvif import ONVIFCamera, ONVIFError
+# # Configuración mejorada para detección a distancia
+# import os
+# import cv2
+# import numpy as np
+# import threading
+# from datetime import datetime, timedelta
+# from collections import defaultdict
+# from urllib.parse import urlparse
+# import requests
+# from requests.adapters import HTTPAdapter, Retry
+# from onvif import ONVIFCamera, ONVIFError
 
-from django.conf import settings
-from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from django.http import StreamingHttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from .models import Persona, Camara, RegistroAcceso, HorarioEmpresa, Cliente, Video
+# from django.conf import settings
+# from django.utils import timezone
+# from rest_framework.decorators import api_view, permission_classes
+# from rest_framework.permissions import IsAuthenticated
+# from rest_framework.response import Response
+# from django.http import StreamingHttpResponse
+# from django.views.decorators.csrf import csrf_exempt
+# from .models import Persona, Camara, RegistroAcceso, HorarioEmpresa, Cliente, Video
 
-# Configuración global
-FRAME_WIDTH = 640
-FRAME_HEIGHT = 480
-MIN_FACE_SIZE = 30
-SCALE_FACTOR = 1.01
-TARGET_FPS = 10
-CONFIDENCE_THRESHOLD = 0.6
-RECOGNITION_THRESHOLD = 90
-FRAME_SKIP = 1
-
-# Funciones de procesamiento (las mismas que proporcionaste)
-def load_dnn_detector():
-    """Carga el modelo de detección facial mejorado"""
-    net = cv2.dnn.readNetFromCaffe(
-        os.path.join(settings.BASE_DIR, 'models', 'deploy.prototxt'),
-        os.path.join(settings.BASE_DIR, 'models', 'res10_300x300_ssd_iter_140000.caffemodel')
-    )    
-    return net
-
-def improved_face_detection(frame, net):
-    """Detección mejorada para rostros a distancia"""
-    (h, w) = frame.shape[:2]
-    
-    # Preprocesamiento mejorado
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray = cv2.equalizeHist(gray)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    processed = clahe.apply(gray)
-    
-    # Convertir de nuevo a BGR para el modelo DNN
-    processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
-    
-    blob = cv2.dnn.blobFromImage(
-        cv2.resize(processed, (300, 300)), 
-        scalefactor=SCALE_FACTOR,
-        size=(300, 300), 
-        mean=(104.0, 177.0, 123.0),
-        swapRB=False
-    )
-    
-    net.setInput(blob)
-    detections = net.forward()
-    
-    valid_faces = []
-    for i in range(detections.shape[2]):
-        confidence = detections[0, 0, i, 2]
-        if confidence > CONFIDENCE_THRESHOLD:
-            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-            (x, y, x2, y2) = box.astype("int")
-            w_face = x2 - x
-            h_face = y2 - y
-            
-            # Criterios más flexibles para rostros pequeños
-            if (w_face >= MIN_FACE_SIZE and h_face >= MIN_FACE_SIZE and 
-                0.3 < w_face/h_face < 3.0):  # Ratio más flexible
-                valid_faces.append((x, y, w_face, h_face))
-    
-    return valid_faces
-
-def enhance_small_faces(face_roi):
-    """Mejora de rostros pequeños usando superresolución"""
-    try:
-        # Crear modelo EDSR para superresolución
-        sr = cv2.dnn_superres.DnnSuperResImpl_create()
-        path = os.path.join(settings.BASE_DIR, 'models', 'EDSR_x4.pb')
-        sr.readModel(path)
-        sr.setModel("edsr", 4)  # Factor de escala 4x
-        
-        # Aplicar superresolución
-        result = sr.upsample(face_roi)
-        return cv2.resize(result, (200, 200))  # Tamaño estandarizado
-    except:
-        return cv2.resize(face_roi, (200, 200))  # Fallback a resize normal
-
-def train_recognizer(dnn_net):
-    """Entrenamiento del reconocedor facial con mejora para rostros pequeños"""
-    personas = Persona.objects.all()
-    if not personas:
-        return None, None
-
-    faces = []
-    labels = []
-    label_map = {}
-    
-    for label, persona in enumerate(personas):
-        try:
-            if not persona.imagen:
-                continue
-                
-            img = cv2.imread(persona.imagen.path)
-            if img is None:
-                continue
-                
-            faces_detected = improved_face_detection(img, dnn_net)
-            for (x, y, w, h) in faces_detected:
-                face_roi = cv2.cvtColor(img[y:y+h, x:x+w], cv2.COLOR_BGR2GRAY)
-                
-                # Aplicar mejora si el rostro es pequeño
-                if w < 100 or h < 100:
-                    processed = enhance_small_faces(face_roi)
-                else:
-                    processed = cv2.resize(face_roi, (200, 200))
-                
-                processed = cv2.equalizeHist(processed)
-                processed = cv2.bilateralFilter(processed, 9, 75, 75)
-                
-                faces.append(processed)
-                labels.append(label)
-                faces.append(cv2.flip(processed, 1))
-                labels.append(label)
-                
-                label_map[label] = persona
-                
-        except Exception as e:
-            print(f"Error procesando {persona.nombre}: {e}")
-            continue
-
-    if faces:
-        recognizer = cv2.face.LBPHFaceRecognizer_create(
-            radius=2, neighbors=8, grid_x=8, grid_y=8)
-        recognizer.train(faces, np.array(labels))
-        print(f"Modelo entrenado con {len(faces)} muestras de {len(label_map)} personas")
-        return recognizer, label_map
-    
-    print("Error: No se encontraron rostros válidos para entrenamiento")
-    return None, None
-
-def enhanced_recognizer_predict(recognizer, face_img, label_map):
-    """Predicción con mejora de imagen para rostros lejanos"""
-    try:
-        # Si el rostro es pequeño, aplicar superresolución
-        if face_img.shape[0] < 100 or face_img.shape[1] < 100:
-            face_img = enhance_small_faces(face_img)
-        else:
-            face_img = cv2.resize(face_img, (200, 200))
-            
-        face_img = cv2.equalizeHist(face_img)
-        face_img = cv2.bilateralFilter(face_img, 9, 75, 75)
-        
-        label, confidence = recognizer.predict(face_img)
-        
-        # Ajustar umbral dinámico basado en tamaño del rostro
-        size_factor = face_img.shape[0] * face_img.shape[1] / (200 * 200)
-        adjusted_threshold = RECOGNITION_THRESHOLD * (1 + (1 - size_factor))
-        
-        if label not in label_map or confidence > adjusted_threshold:
-            return "Desconocido", confidence, (0, 0, 255)
-        
-        return label_map[label].nombre, confidence, (0, 255, 0)
-    except Exception as e:
-        print(f"Error en predicción: {e}")
-        return "Desconocido", 100, (0, 0, 255)
-
-# Funciones de notificación (las mismas que proporcionaste)
-notification_timers = defaultdict(dict)
-notification_lock = threading.Lock()
-
-def enviar_notificacion_personalizada(imagen_path, mensaje):
-    usuarios = Cliente.objects.exclude(telegram_chat_id__isnull=True).exclude(telegram_chat_id__exact='')
-    
-    if not usuarios.exists():
-        print("❌ No hay usuarios con chat_id registrado")
-        return False
-
-    session = requests.Session()
-    retries = Retry(
-        total=3,
-        backoff_factor=1,
-        status_forcelist=[500, 502, 503, 504],
-        allowed_methods=['POST']
-    )
-    session.mount('https://', HTTPAdapter(max_retries=retries))
-
-    resultados = []
-    for usuario in usuarios:
-        try:
-            url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendPhoto"
-            with open(imagen_path, 'rb') as foto:
-                files = {'photo': foto}
-                data = {
-                    'chat_id': usuario.telegram_chat_id,
-                    'caption': mensaje[:1024],
-                    'parse_mode': 'Markdown'
-                }
-                response = session.post(url, files=files, data=data, timeout=10)
-                
-                if response.status_code == 200:
-                    resultados.append(True)
-                else:
-                    resultados.append(False)
-                    
-        except Exception as e:
-            resultados.append(False)
-    
-    return any(resultados)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated]) 
-def send_telegram_notification(absolute_path, mensaje, camera_name):
-    try:
-        if not os.path.exists(absolute_path):
-            print(f"Archivo no encontrado: {absolute_path}")
-            return False
-            
-        success = enviar_notificacion_personalizada(absolute_path, mensaje)
-        
-        if success:
-            with notification_lock:
-                notification_timers[camera_name]["last_sent"] = datetime.now()
-                
-        return success
-        
-    except Exception as e:
-        print(f"Error enviando notificación: {str(e)}")
-        return False
-
-# Endpoints para Thunder Client
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def recognition_status(request):
-    """Endpoint para verificar estado del reconocedor facial"""
-    try:
-        dnn_net = load_dnn_detector()
-        recognizer, label_map = train_recognizer(dnn_net)
-        
-        status = {
-            "model_loaded": recognizer is not None,
-            "people_registered": len(label_map) if label_map else 0,
-            "detection_threshold": CONFIDENCE_THRESHOLD,
-            "recognition_threshold": RECOGNITION_THRESHOLD,
-            "system_status": "operational" if recognizer else "not_ready"
-        }
-        
-        return Response(status)
-        
-    except Exception as e:
-        return Response({"status": "error", "message": str(e)}, status=500)
-
-@csrf_exempt
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def send_test_notification(request):
-    """Envía una notificación de prueba a Telegram"""
-    try:
-        # Crear imagen de prueba
-        test_img = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(test_img, "NOTIFICACION DE PRUEBA", (50, 240), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        
-        img_dir = os.path.join(settings.MEDIA_ROOT, 'test_notifications')
-        os.makedirs(img_dir, exist_ok=True)
-        img_path = os.path.join(img_dir, 'test_notification.jpg')
-        cv2.imwrite(img_path, test_img)
-        
-        mensaje = (
-            "🔔 *Notificación de Prueba* 🔔\n"
-            "Este es un mensaje de prueba del sistema de reconocimiento facial.\n"
-            f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        )
-        
-        success = send_telegram_notification(img_path, mensaje, "TEST_CAMERA")
-        
-        if success:
-            return Response({
-                "status": "success",
-                "message": "Notificación enviada correctamente",
-                "image_path": img_path
-            })
-        else:
-            return Response({
-                "status": "error",
-                "message": "Error al enviar notificación"
-            }, status=500)
-            
-    except Exception as e:
-        return Response({
-            "status": "error",
-            "message": str(e)
-        }, status=500)
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_recent_detections(request):
-    """Obtiene las últimas detecciones registradas"""
-    try:
-        limit = int(request.query_params.get('limit', 10))
-        detections = RegistroAcceso.objects.select_related('persona')\
-                          .order_by('-fecha')[:limit]
-        
-        results = []
-        for det in detections:
-            results.append({
-                "id": det.id,
-                "persona": det.persona.nombre if det.persona else "Desconocido",
-                "fecha": det.fecha_hora.strftime('%Y-%m-%d %H:%M:%S'),
-                "tipo": "conocido" if det.persona else "desconocido",
-                "imagen_url": request.build_absolute_uri(det.imagen_capturada.url) if det.imagen_capturada else None
-            })
-            
-        return Response({
-            "status": "success",
-            "count": len(results),
-            "results": results
-        })
-        
-    except Exception as e:
-        return Response({
-            "status": "error",
-            "message": str(e)
-        }, status=500)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def update_thresholds(request):
-    """Actualiza los umbrales de detección y reconocimiento"""
-    try:
-        global CONFIDENCE_THRESHOLD, RECOGNITION_THRESHOLD
-        
-        new_confidence = float(request.data.get('confidence', CONFIDENCE_THRESHOLD))
-        new_recognition = float(request.data.get('recognition', RECOGNITION_THRESHOLD))
-        
-        # Validaciones
-        if not 0.1 <= new_confidence <= 0.9:
-            raise ValueError("El umbral de confianza debe estar entre 0.1 y 0.9")
-        if not 50 <= new_recognition <= 150:
-            raise ValueError("El umbral de reconocimiento debe estar entre 50 y 150")
-            
-        CONFIDENCE_THRESHOLD = new_confidence
-        RECOGNITION_THRESHOLD = new_recognition
-        
-        return Response({
-            "status": "success",
-            "new_confidence_threshold": CONFIDENCE_THRESHOLD,
-            "new_recognition_threshold": RECOGNITION_THRESHOLD,
-            "message": "Umbrales actualizados correctamente"
-        })
-        
-    except Exception as e:
-        return Response({
-            "status": "error",
-            "message": str(e)
-        }, status=400)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def register_unknown_face(request):
-    """Registra un rostro desconocido como nueva persona"""
-    try:
-        if not request.FILES.get('image'):
-            return Response({
-                "status": "error",
-                "message": "No se proporcionó imagen"
-            }, status=400)
-            
-        # Procesar imagen
-        img_bytes = request.FILES['image'].read()
-        img_array = np.frombuffer(img_bytes, np.uint8)
-        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-        
-        if img is None:
-            return Response({
-                "status": "error",
-                "message": "Imagen no válida"
-            }, status=400)
-            
-        # Detectar rostros
-        dnn_net = load_dnn_detector()
-        faces = improved_face_detection(img, dnn_net)
-        
-        if not faces:
-            return Response({
-                "status": "error",
-                "message": "No se detectaron rostros en la imagen"
-            }, status=400)
-            
-        # Tomar el primer rostro
-        x, y, w, h = faces[0]
-        face_roi = img[y:y+h, x:x+w]
-        
-        # Crear nueva persona
-        nombre = request.data.get('nombre', 'Nueva Persona')
-        persona = Persona.objects.create(nombre=nombre)
-        
-        # Guardar imagen
-        persona_dir = os.path.join(settings.MEDIA_ROOT, 'personas')
-        os.makedirs(persona_dir, exist_ok=True)
-        img_path = os.path.join(persona_dir, f'persona_{persona.id}.jpg')
-        cv2.imwrite(img_path, face_roi)
-        
-        persona.imagen = os.path.join('personas', f'persona_{persona.id}.jpg')
-        persona.save()
-        
-        # Reentrenar modelo
-        train_recognizer(dnn_net)
-        
-        return Response({
-            "status": "success",
-            "persona": {
-                "id": persona.id,
-                "nombre": persona.nombre,
-                "imagen_url": request.build_absolute_uri(persona.imagen.url)
-            },
-            "message": "Persona registrada correctamente"
-        })
-        
-    except Exception as e:
-        return Response({
-            "status": "error",
-            "message": str(e)
-        }, status=500)
-
-# Endpoint principal de video (el que ya tenías)
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def video_feed_flexible(request, camera_id):
-    """Endpoint que devuelve streaming o JSON según el header 'Accept'"""
-    if request.accepted_media_type == 'application/json':
-        # Devuelve metadatos en JSON (para Thunder Client)
-        try:
-            camara = Camara.objects.get(id=camera_id)
-            return Response({
-                "status": "active",
-                "camera_id": camera_id,
-                "camera_name": camara.nombreC,
-                "ip_address": camara.numero_ip,
-                "stream_url": f"rtsp://{camara.usuario}:{camara.password}@{camara.numero_ip}:{camara.puerto}/stream",
-                "message": "Use un navegador para ver el video en vivo"
-            })
-        except Camara.DoesNotExist:
-            return Response({
-                "status": "error",
-                "message": "Cámara no encontrada"
-            }, status=404)
-    else:
-        # Devuelve el stream de video
-        return StreamingHttpResponse(
-            robust_video_gen(camera_id),
-            content_type='multipart/x-mixed-replace; boundary=frame'
-        )
+# # Configuración global
 # FRAME_WIDTH = 640
 # FRAME_HEIGHT = 480
-# MIN_FACE_SIZE = 30  # Reducido para detectar rostros más pequeños
-# SCALE_FACTOR = 1.01  # Más preciso para rostros pequeños
+# MIN_FACE_SIZE = 30
+# SCALE_FACTOR = 1.01
 # TARGET_FPS = 10
-# CONFIDENCE_THRESHOLD = 0.6  # Umbral más bajo
+# CONFIDENCE_THRESHOLD = 0.6
 # RECOGNITION_THRESHOLD = 90
 # FRAME_SKIP = 1
 
+# # Funciones de procesamiento (las mismas que proporcionaste)
 # def load_dnn_detector():
 #     """Carga el modelo de detección facial mejorado"""
 #     net = cv2.dnn.readNetFromCaffe(
@@ -1159,63 +766,9 @@ def video_feed_flexible(request, camera_id):
 #         print(f"Error en predicción: {e}")
 #         return "Desconocido", 100, (0, 0, 255)
 
-def configure_camera(cap):
-    """Configura parámetros de cámara para mejor detección a distancia"""
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)  # Máxima resolución posible
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-    cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
-    cap.set(cv2.CAP_PROP_FOCUS, 0)  # Desenfocar ligeramente para rostros lejanos
-    cap.set(cv2.CAP_PROP_ZOOM, 0)  # Sin zoom digital
-    cap.set(cv2.CAP_PROP_BRIGHTNESS, 0.5)
-    cap.set(cv2.CAP_PROP_CONTRAST, 0.5)
-    cap.set(cv2.CAP_PROP_SHARPNESS, 0.3)
-
-def verify_media_dirs():
-    """Verifica y crea los directorios necesarios con permisos"""
-    try:
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'imagenes_capturadas'), mode=0o777, exist_ok=True)
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'videos_capturados'), mode=0o777, exist_ok=True)
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'unknown_faces'), mode=0o777, exist_ok=True)
-        print(f"Directorios verificados en: {settings.MEDIA_ROOT}")
-        return True
-    except Exception as e:
-        print(f"Error creando directorios: {str(e)}")
-        return False
-
-def error_frame(message):
-    """Genera un frame de error"""
-    frame = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
-    cv2.putText(frame, message, (10, 30), 
-               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-    ret, jpeg = cv2.imencode('.jpg', frame)
-    return jpeg.tobytes()
-
+# # Funciones de notificación (las mismas que proporcionaste)
 # notification_timers = defaultdict(dict)
 # notification_lock = threading.Lock()
-
-# def schedule_telegram_notification(camera_name, absolute_path, mensaje):
-#     with notification_lock:
-#         # Cancelar temporizador existente
-#         if camera_name in notification_timers:
-#             notification_timers[camera_name]["timer"].cancel()
-        
-#         # Determinar el intervalo de espera
-#         last_sent = notification_timers.get(camera_name, {}).get("last_sent")
-#         elapsed = datetime.now() - last_sent if last_sent else None
-#         delay = 0 if (not last_sent or elapsed > timedelta(minutes=5)) else 300
-        
-#         # Crear temporizador
-#         timer = threading.Timer(
-#             interval=delay,
-#             function=lambda: send_telegram_notification(absolute_path, mensaje, camera_name)
-#         )
-#         timer.start()
-        
-#         # Actualizar registro
-#         notification_timers[camera_name] = {
-#             "timer": timer,
-#             "last_sent": datetime.now() if delay == 0 else last_sent
-#         }
 
 # def enviar_notificacion_personalizada(imagen_path, mensaje):
 #     usuarios = Cliente.objects.exclude(telegram_chat_id__isnull=True).exclude(telegram_chat_id__exact='')
@@ -1256,6 +809,8 @@ def error_frame(message):
     
 #     return any(resultados)
 
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated]) 
 # def send_telegram_notification(absolute_path, mensaje, camera_name):
 #     try:
 #         if not os.path.exists(absolute_path):
@@ -1274,71 +829,546 @@ def error_frame(message):
 #         print(f"Error enviando notificación: {str(e)}")
 #         return False
 
-# def save_and_notify_face(frame, face_roi, nombre, conf, camera_name):
+# # Endpoints para Thunder Client
+# @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+# def recognition_status(request):
+#     """Endpoint para verificar estado del reconocedor facial"""
 #     try:
-#         img_dir = os.path.join(settings.MEDIA_ROOT, 'imagenes_capturadas')
-#         os.makedirs(img_dir, exist_ok=True)
-#         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-#         img_name = f"{nombre}_{timestamp}.jpg"
-#         img_path = os.path.join(img_dir, img_name)
-#         cv2.imwrite(img_path, face_roi)
+#         dnn_net = load_dnn_detector()
+#         recognizer, label_map = train_recognizer(dnn_net)
         
-#         relative_path = os.path.join('imagenes_capturadas', img_name)
-#         persona = Persona.objects.filter(nombre=nombre).first() if nombre != "Desconocido" else None
-#         RegistroAcceso.objects.create(persona=persona, imagen_capturada=relative_path)
-        
-#         ahora = timezone.localtime()
-#         dia_semana_ingles = ahora.strftime('%a').upper()[:3]
-
-#         dias_traduccion = {
-#             'MON': 'LUN',
-#             'TUE': 'MAR',
-#             'WED': 'MIE',
-#             'THU': 'JUE',
-#             'FRI': 'VIE',
-#             'SAT': 'SAB',
-#             'SUN': 'DOM'
+#         status = {
+#             "model_loaded": recognizer is not None,
+#             "people_registered": len(label_map) if label_map else 0,
+#             "detection_threshold": CONFIDENCE_THRESHOLD,
+#             "recognition_threshold": RECOGNITION_THRESHOLD,
+#             "system_status": "operational" if recognizer else "not_ready"
 #         }
-#         dia_semana = dias_traduccion.get(dia_semana_ingles, dia_semana_ingles)
-
-#         fuera_de_horario = True
-#         try:
-#             horario = HorarioEmpresa.objects.get(dia=dia_semana)  
-          
-#             if not horario.cerrado:
-#                 hora_actual = ahora.time()
-#                 if horario.abre is not None and horario.cierra is not None:
-#                     fuera_de_horario = hora_actual < horario.abre or hora_actual > horario.cierra
-#                 elif horario.abre is not None:
-#                     fuera_de_horario = hora_actual < horario.abre
-#                 elif horario.cierra is not None:
-#                     fuera_de_horario = hora_actual > horario.cierra
-#                 else:
-#                     fuera_de_horario = False
-#         except HorarioEmpresa.DoesNotExist:
-#             fuera_de_horario = True
-#         except Exception as e:
-#             print(f"Error al verificar horario: {e}")
-#             fuera_de_horario = True               
         
-#         if fuera_de_horario:
-#             mensaje = (
-#                 f"🚨 *Alerta de Seguridad* 🚨\n"
-#                 f"• *Tipo:* {'Intruso' if nombre == 'Desconocido' else 'Persona conocida'}\n"
-#                 f"• *Nombre:* {nombre}\n"
-#                 f"• *Hora:* {ahora.strftime('%d/%m/%Y %H:%M')}\n"
-#                 f"• *Cámara:* {camera_name}\n"
-#                 f"• *Confianza:* {conf:.2f}%"
-#             )
-            
-#             absolute_path = os.path.join(settings.MEDIA_ROOT, relative_path)
-#             schedule_telegram_notification(camera_name, absolute_path, mensaje)
-            
-#         return True
+#         return Response(status)
         
 #     except Exception as e:
-#         print(f"Error al guardar/notificar rostro: {str(e)}")
-#         return False
+#         return Response({"status": "error", "message": str(e)}, status=500)
+
+# @csrf_exempt
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def send_test_notification(request):
+#     """Envía una notificación de prueba a Telegram"""
+#     try:
+#         # Crear imagen de prueba
+#         test_img = np.zeros((480, 640, 3), dtype=np.uint8)
+#         cv2.putText(test_img, "NOTIFICACION DE PRUEBA", (50, 240), 
+#                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+#         img_dir = os.path.join(settings.MEDIA_ROOT, 'test_notifications')
+#         os.makedirs(img_dir, exist_ok=True)
+#         img_path = os.path.join(img_dir, 'test_notification.jpg')
+#         cv2.imwrite(img_path, test_img)
+        
+#         mensaje = (
+#             "🔔 *Notificación de Prueba* 🔔\n"
+#             "Este es un mensaje de prueba del sistema de reconocimiento facial.\n"
+#             f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+#         )
+        
+#         success = send_telegram_notification(img_path, mensaje, "TEST_CAMERA")
+        
+#         if success:
+#             return Response({
+#                 "status": "success",
+#                 "message": "Notificación enviada correctamente",
+#                 "image_path": img_path
+#             })
+#         else:
+#             return Response({
+#                 "status": "error",
+#                 "message": "Error al enviar notificación"
+#             }, status=500)
+            
+#     except Exception as e:
+#         return Response({
+#             "status": "error",
+#             "message": str(e)
+#         }, status=500)
+
+# @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+# def get_recent_detections(request):
+#     """Obtiene las últimas detecciones registradas"""
+#     try:
+#         limit = int(request.query_params.get('limit', 10))
+#         detections = RegistroAcceso.objects.select_related('persona')\
+#                           .order_by('-fecha')[:limit]
+        
+#         results = []
+#         for det in detections:
+#             results.append({
+#                 "id": det.id,
+#                 "persona": det.persona.nombre if det.persona else "Desconocido",
+#                 "fecha": det.fecha_hora.strftime('%Y-%m-%d %H:%M:%S'),
+#                 "tipo": "conocido" if det.persona else "desconocido",
+#                 "imagen_url": request.build_absolute_uri(det.imagen_capturada.url) if det.imagen_capturada else None
+#             })
+            
+#         return Response({
+#             "status": "success",
+#             "count": len(results),
+#             "results": results
+#         })
+        
+#     except Exception as e:
+#         return Response({
+#             "status": "error",
+#             "message": str(e)
+#         }, status=500)
+
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def update_thresholds(request):
+#     """Actualiza los umbrales de detección y reconocimiento"""
+#     try:
+#         global CONFIDENCE_THRESHOLD, RECOGNITION_THRESHOLD
+        
+#         new_confidence = float(request.data.get('confidence', CONFIDENCE_THRESHOLD))
+#         new_recognition = float(request.data.get('recognition', RECOGNITION_THRESHOLD))
+        
+#         # Validaciones
+#         if not 0.1 <= new_confidence <= 0.9:
+#             raise ValueError("El umbral de confianza debe estar entre 0.1 y 0.9")
+#         if not 50 <= new_recognition <= 150:
+#             raise ValueError("El umbral de reconocimiento debe estar entre 50 y 150")
+            
+#         CONFIDENCE_THRESHOLD = new_confidence
+#         RECOGNITION_THRESHOLD = new_recognition
+        
+#         return Response({
+#             "status": "success",
+#             "new_confidence_threshold": CONFIDENCE_THRESHOLD,
+#             "new_recognition_threshold": RECOGNITION_THRESHOLD,
+#             "message": "Umbrales actualizados correctamente"
+#         })
+        
+#     except Exception as e:
+#         return Response({
+#             "status": "error",
+#             "message": str(e)
+#         }, status=400)
+
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def register_unknown_face(request):
+#     """Registra un rostro desconocido como nueva persona"""
+#     try:
+#         if not request.FILES.get('image'):
+#             return Response({
+#                 "status": "error",
+#                 "message": "No se proporcionó imagen"
+#             }, status=400)
+            
+#         # Procesar imagen
+#         img_bytes = request.FILES['image'].read()
+#         img_array = np.frombuffer(img_bytes, np.uint8)
+#         img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        
+#         if img is None:
+#             return Response({
+#                 "status": "error",
+#                 "message": "Imagen no válida"
+#             }, status=400)
+            
+#         # Detectar rostros
+#         dnn_net = load_dnn_detector()
+#         faces = improved_face_detection(img, dnn_net)
+        
+#         if not faces:
+#             return Response({
+#                 "status": "error",
+#                 "message": "No se detectaron rostros en la imagen"
+#             }, status=400)
+            
+#         # Tomar el primer rostro
+#         x, y, w, h = faces[0]
+#         face_roi = img[y:y+h, x:x+w]
+        
+#         # Crear nueva persona
+#         nombre = request.data.get('nombre', 'Nueva Persona')
+#         persona = Persona.objects.create(nombre=nombre)
+        
+#         # Guardar imagen
+#         persona_dir = os.path.join(settings.MEDIA_ROOT, 'personas')
+#         os.makedirs(persona_dir, exist_ok=True)
+#         img_path = os.path.join(persona_dir, f'persona_{persona.id}.jpg')
+#         cv2.imwrite(img_path, face_roi)
+        
+#         persona.imagen = os.path.join('personas', f'persona_{persona.id}.jpg')
+#         persona.save()
+        
+#         # Reentrenar modelo
+#         train_recognizer(dnn_net)
+        
+#         return Response({
+#             "status": "success",
+#             "persona": {
+#                 "id": persona.id,
+#                 "nombre": persona.nombre,
+#                 "imagen_url": request.build_absolute_uri(persona.imagen.url)
+#             },
+#             "message": "Persona registrada correctamente"
+#         })
+        
+#     except Exception as e:
+#         return Response({
+#             "status": "error",
+#             "message": str(e)
+#         }, status=500)
+
+# # Endpoint principal de video (el que ya tenías)
+
+
+
+
+
+
+FRAME_WIDTH = 640
+FRAME_HEIGHT = 480
+MIN_FACE_SIZE = 30  # Reducido para detectar rostros más pequeños
+SCALE_FACTOR = 1.01  # Más preciso para rostros pequeños
+TARGET_FPS = 10
+CONFIDENCE_THRESHOLD = 0.6  # Umbral más bajo
+RECOGNITION_THRESHOLD = 90
+FRAME_SKIP = 1
+
+def load_dnn_detector():
+    """Carga el modelo de detección facial mejorado"""
+    net = cv2.dnn.readNetFromCaffe(
+        os.path.join(settings.BASE_DIR, 'models', 'deploy.prototxt'),
+        os.path.join(settings.BASE_DIR, 'models', 'res10_300x300_ssd_iter_140000.caffemodel')
+    )    
+    return net
+
+def improved_face_detection(frame, net):
+    """Detección mejorada para rostros a distancia"""
+    (h, w) = frame.shape[:2]
+    
+    # Preprocesamiento mejorado
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.equalizeHist(gray)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    processed = clahe.apply(gray)
+    
+    # Convertir de nuevo a BGR para el modelo DNN
+    processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
+    
+    blob = cv2.dnn.blobFromImage(
+        cv2.resize(processed, (300, 300)), 
+        scalefactor=SCALE_FACTOR,
+        size=(300, 300), 
+        mean=(104.0, 177.0, 123.0),
+        swapRB=False
+    )
+    
+    net.setInput(blob)
+    detections = net.forward()
+    
+    valid_faces = []
+    for i in range(detections.shape[2]):
+        confidence = detections[0, 0, i, 2]
+        if confidence > CONFIDENCE_THRESHOLD:
+            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            (x, y, x2, y2) = box.astype("int")
+            w_face = x2 - x
+            h_face = y2 - y
+            
+            # Criterios más flexibles para rostros pequeños
+            if (w_face >= MIN_FACE_SIZE and h_face >= MIN_FACE_SIZE and 
+                0.3 < w_face/h_face < 3.0):  # Ratio más flexible
+                valid_faces.append((x, y, w_face, h_face))
+    
+    return valid_faces
+
+def enhance_small_faces(face_roi):
+    """Mejora de rostros pequeños usando superresolución"""
+    try:
+        # Crear modelo EDSR para superresolución
+        sr = cv2.dnn_superres.DnnSuperResImpl_create()
+        path = os.path.join(settings.BASE_DIR, 'models', 'EDSR_x4.pb')
+        sr.readModel(path)
+        sr.setModel("edsr", 4)  # Factor de escala 4x
+        
+        # Aplicar superresolución
+        result = sr.upsample(face_roi)
+        return cv2.resize(result, (200, 200))  # Tamaño estandarizado
+    except:
+        return cv2.resize(face_roi, (200, 200))  # Fallback a resize normal
+
+def train_recognizer(dnn_net):
+    """Entrenamiento del reconocedor facial con mejora para rostros pequeños"""
+    personas = Persona.objects.all()
+    if not personas:
+        return None, None
+
+    faces = []
+    labels = []
+    label_map = {}
+    
+    for label, persona in enumerate(personas):
+        try:
+            if not persona.imagen:
+                continue
+                
+            img = cv2.imread(persona.imagen.path)
+            if img is None:
+                continue
+                
+            faces_detected = improved_face_detection(img, dnn_net)
+            for (x, y, w, h) in faces_detected:
+                face_roi = cv2.cvtColor(img[y:y+h, x:x+w], cv2.COLOR_BGR2GRAY)
+                
+                # Aplicar mejora si el rostro es pequeño
+                if w < 100 or h < 100:
+                    processed = enhance_small_faces(face_roi)
+                else:
+                    processed = cv2.resize(face_roi, (200, 200))
+                
+                processed = cv2.equalizeHist(processed)
+                processed = cv2.bilateralFilter(processed, 9, 75, 75)
+                
+                faces.append(processed)
+                labels.append(label)
+                faces.append(cv2.flip(processed, 1))
+                labels.append(label)
+                
+                label_map[label] = persona
+                
+        except Exception as e:
+            print(f"Error procesando {persona.nombre}: {e}")
+            continue
+
+    if faces:
+        recognizer = cv2.face.LBPHFaceRecognizer_create(
+            radius=2, neighbors=8, grid_x=8, grid_y=8)
+        recognizer.train(faces, np.array(labels))
+        print(f"Modelo entrenado con {len(faces)} muestras de {len(label_map)} personas")
+        return recognizer, label_map
+    
+    print("Error: No se encontraron rostros válidos para entrenamiento")
+    return None, None
+
+def enhanced_recognizer_predict(recognizer, face_img, label_map):
+    """Predicción con mejora de imagen para rostros lejanos"""
+    try:
+        # Si el rostro es pequeño, aplicar superresolución
+        if face_img.shape[0] < 100 or face_img.shape[1] < 100:
+            face_img = enhance_small_faces(face_img)
+        else:
+            face_img = cv2.resize(face_img, (200, 200))
+            
+        face_img = cv2.equalizeHist(face_img)
+        face_img = cv2.bilateralFilter(face_img, 9, 75, 75)
+        
+        label, confidence = recognizer.predict(face_img)
+        
+        # Ajustar umbral dinámico basado en tamaño del rostro
+        size_factor = face_img.shape[0] * face_img.shape[1] / (200 * 200)
+        adjusted_threshold = RECOGNITION_THRESHOLD * (1 + (1 - size_factor))
+        
+        if label not in label_map or confidence > adjusted_threshold:
+            return "Desconocido", confidence, (0, 0, 255)
+        
+        return label_map[label].nombre, confidence, (0, 255, 0)
+    except Exception as e:
+        print(f"Error en predicción: {e}")
+        return "Desconocido", 100, (0, 0, 255)
+
+def configure_camera(cap):
+    """Configura parámetros de cámara para mejor detección a distancia"""
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)  # Máxima resolución posible
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+    cap.set(cv2.CAP_PROP_FOCUS, 0)  # Desenfocar ligeramente para rostros lejanos
+    cap.set(cv2.CAP_PROP_ZOOM, 0)  # Sin zoom digital
+    cap.set(cv2.CAP_PROP_BRIGHTNESS, 0.5)
+    cap.set(cv2.CAP_PROP_CONTRAST, 0.5)
+    cap.set(cv2.CAP_PROP_SHARPNESS, 0.3)
+
+def verify_media_dirs():
+    """Verifica y crea los directorios necesarios con permisos"""
+    try:
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'imagenes_capturadas'), mode=0o777, exist_ok=True)
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'videos_capturados'), mode=0o777, exist_ok=True)
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, 'unknown_faces'), mode=0o777, exist_ok=True)
+        print(f"Directorios verificados en: {settings.MEDIA_ROOT}")
+        return True
+    except Exception as e:
+        print(f"Error creando directorios: {str(e)}")
+        return False
+
+def error_frame(message):
+    """Genera un frame de error"""
+    frame = np.zeros((FRAME_HEIGHT, FRAME_WIDTH, 3), dtype=np.uint8)
+    cv2.putText(frame, message, (10, 30), 
+               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    ret, jpeg = cv2.imencode('.jpg', frame)
+    return jpeg.tobytes()
+
+notification_timers = defaultdict(dict)
+notification_lock = threading.Lock()
+
+def schedule_telegram_notification(camera_name, absolute_path, mensaje):
+    with notification_lock:
+        # Cancelar temporizador existente
+        if camera_name in notification_timers:
+            notification_timers[camera_name]["timer"].cancel()
+        
+        # Determinar el intervalo de espera
+        last_sent = notification_timers.get(camera_name, {}).get("last_sent")
+        elapsed = datetime.now() - last_sent if last_sent else None
+        delay = 0 if (not last_sent or elapsed > timedelta(minutes=5)) else 300
+        print(f"Intentando enviar notificación inmediata para {camera_name}")
+        # Crear temporizador
+        timer = threading.Timer(
+            interval=delay,
+            function=lambda: send_telegram_notification(absolute_path, mensaje, camera_name)
+        )
+        timer.start()
+        
+        # Actualizar registro
+        notification_timers[camera_name] = {
+            "timer": timer,
+            "last_sent": datetime.now() if delay == 0 else last_sent
+        }
+
+def enviar_notificacion_personalizada(imagen_path, mensaje):
+    print(f"Intentando enviar notificación con imagen: {imagen_path}")
+    usuarios = Cliente.objects.exclude(telegram_chat_id__isnull=True).exclude(telegram_chat_id__exact='')
+    
+    if not usuarios.exists():
+        print("❌ No hay usuarios con chat_id registrado")
+        return False
+
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=['POST']
+    )
+    session.mount('https://', HTTPAdapter(max_retries=retries))
+
+    resultados = []
+    for usuario in usuarios:
+        try:
+            url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendPhoto"
+            with open(imagen_path, 'rb') as foto:
+                files = {'photo': foto}
+                data = {
+                    'chat_id': usuario.telegram_chat_id,
+                    'caption': mensaje[:1024],
+                    'parse_mode': 'Markdown'
+                }
+                response = session.post(url, files=files, data=data, timeout=10)
+                response = requests.post(url, files={'photo': foto}, data={
+                    'chat_id': usuario.telegram_chat_id,
+                    'caption': mensaje
+                })
+                print(response.json())
+                print('ENVIANDO')
+                if response.status_code == 200:
+                    resultados.append(True)
+                else:
+                    resultados.append(False)
+                    
+        except Exception as e:
+            resultados.append(False)
+    
+    return any(resultados)
+
+def send_telegram_notification(absolute_path, mensaje, camera_name):
+    try:
+        if not os.path.exists(absolute_path):
+            print(f"Archivo no encontrado: {absolute_path}")
+            return False
+            
+        success = enviar_notificacion_personalizada(absolute_path, mensaje)
+        
+        if success:
+            with notification_lock:
+                notification_timers[camera_name]["last_sent"] = datetime.now()
+                
+        return success
+        
+    except Exception as e:
+        print(f"Error enviando notificación: {str(e)}")
+        return False
+
+def save_and_notify_face(frame, face_roi, nombre, conf, camera_name):
+    try:
+        img_dir = os.path.join(settings.MEDIA_ROOT, 'imagenes_capturadas')
+        print(f"Intentando guardar en: {img_dir}")
+        os.makedirs(img_dir, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        img_name = f"{nombre}_{timestamp}.jpg"
+        img_path = os.path.join(img_dir, img_name)
+        cv2.imwrite(img_path, face_roi)
+        print(f"Imagen guardada en: {img_path}")
+        relative_path = os.path.join('imagenes_capturadas', img_name)
+        persona = Persona.objects.filter(nombre=nombre).first() if nombre != "Desconocido" else None
+        RegistroAcceso.objects.create(persona=persona, imagen_capturada=relative_path)
+        
+        ahora = timezone.localtime()
+        dia_semana_ingles = ahora.strftime('%a').upper()[:3]
+
+        dias_traduccion = {
+            'MON': 'LUN',
+            'TUE': 'MAR',
+            'WED': 'MIE',
+            'THU': 'JUE',
+            'FRI': 'VIE',
+            'SAT': 'SAB',
+            'SUN': 'DOM'
+        }
+        dia_semana = dias_traduccion.get(dia_semana_ingles, dia_semana_ingles)
+
+        fuera_de_horario = True
+        try:
+            horario = HorarioEmpresa.objects.get(dia=dia_semana)  
+          
+            if not horario.cerrado:
+                hora_actual = ahora.time()
+                if horario.abre is not None and horario.cierra is not None:
+                    fuera_de_horario = hora_actual < horario.abre or hora_actual > horario.cierra
+                elif horario.abre is not None:
+                    fuera_de_horario = hora_actual < horario.abre
+                elif horario.cierra is not None:
+                    fuera_de_horario = hora_actual > horario.cierra
+                else:
+                    fuera_de_horario = False
+        except HorarioEmpresa.DoesNotExist:
+            fuera_de_horario = True
+        except Exception as e:
+            print(f"Error al verificar horario: {e}")
+            fuera_de_horario = True               
+        
+        if fuera_de_horario:
+            mensaje = (
+                f"🚨 *Alerta de Seguridad* 🚨\n"
+                f"• *Tipo:* {'Intruso' if nombre == 'Desconocido' else 'Persona conocida'}\n"
+                f"• *Nombre:* {nombre}\n"
+                f"• *Hora:* {ahora.strftime('%d/%m/%Y %H:%M')}\n"
+                f"• *Cámara:* {camera_name}\n"
+                f"• *Confianza:* {conf:.2f}%"
+            )
+            print('fuera de horario')
+            absolute_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+            schedule_telegram_notification(camera_name, absolute_path, mensaje)
+            
+        return True
+        
+    except Exception as e:
+        print(f"Error al guardar/notificar rostro: {str(e)}")
+        return False
 
 def get_rtsp_url(ip, port, user, password):
     try:
@@ -1510,6 +1540,118 @@ def robust_video_gen(camera_id=None):
         if cap:
             cap.release()
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def video_feed_flexible(request, camera_id):
+    """Endpoint que devuelve streaming o JSON según el header 'Accept'"""
+    if request.accepted_media_type == 'application/json':
+        # Devuelve metadatos en JSON (para Thunder Client)
+        try:
+            camara = Camara.objects.get(id=camera_id)
+            return Response({
+                "status": "active",
+                "camera_id": camera_id,
+                "camera_name": camara.nombreC,
+                "ip_address": camara.numero_ip,
+                "stream_url": f"rtsp://{camara.usuario}:{camara.password}@{camara.numero_ip}:{camara.puerto}/stream",
+                "message": "Use un navegador para ver el video en vivo"
+            })
+        except Camara.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Cámara no encontrada"
+            }, status=404)
+    else:
+        # Devuelve el stream de video
+        return StreamingHttpResponse(
+            robust_video_gen(camera_id),
+            content_type='multipart/x-mixed-replace; boundary=frame'
+        )
+    
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+import cv2
+import numpy as np
+import os
+from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt 
+
+@csrf_exempt 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def test_face_detection_api(request):
+    """Prueba el modelo de detección facial con una imagen enviada desde Thunder Client"""
+    try:
+        # 1. Validar imagen recibida
+        if 'image' not in request.FILES:
+            return Response({"error": "Envía una imagen en el campo 'image'"}, status=400)
+        
+        # 2. Convertir imagen a formato OpenCV
+        file = request.FILES['image']
+        img_array = np.frombuffer(file.read(), np.uint8)
+        frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        
+        # 3. Usar tu función existente
+        net = load_dnn_detector()  # Tu función original
+        faces = improved_face_detection(frame, net)  # Tu función original
+        
+        # 4. Formatear respuesta para Thunder Client
+        response_data = {
+            "faces_detected": len(faces),
+            "details": [
+                {
+                    "position": {"x": x, "y": y, "width": w, "height": h},
+                    "confidence": confidence  # Si tu modelo devuelve confianza
+                } for (x, y, w, h) in faces
+            ],
+            "message": "Detección exitosa"
+        }
+        
+        return Response(response_data)
+        
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@csrf_exempt 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def test_telegram_notification_api(request):
+    """Envía una notificación de prueba a Telegram desde Thunder Client"""
+    try:
+        # 1. Validar datos (usando imagen de prueba o una subida)
+        test_img_path = os.path.join(settings.BASE_DIR, 'static', 'test_face.jpg')  # Ruta a una imagen de prueba
+        
+        if 'image' in request.FILES:
+            # Guardar imagen temporalmente
+            file = request.FILES['image']
+            test_img_path = os.path.join(settings.MEDIA_ROOT, 'temp_test_notif.jpg')
+            with open(test_img_path, 'wb+') as f:
+                for chunk in file.chunks():
+                    f.write(chunk)
+        
+        # 2. Usar tu función existente
+        mensaje = request.data.get('message', '🔔 Notificación de prueba del sistema de seguridad')
+        camera_name = request.data.get('camera_name', 'Cámara de prueba')
+        
+        # Reutilizamos tu lógica original
+        success = send_telegram_notification(
+            absolute_path=test_img_path,
+            mensaje=mensaje,
+            camera_name=camera_name
+        )
+        
+        # 3. Respuesta para Thunder Client
+        return Response({
+            "status": "success" if success else "error",
+            "message": mensaje,
+            "image_sent": os.path.basename(test_img_path),
+            "notification_sent": success
+        })
+        
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 # def video_feed(request, camera_id):
 #     try:
 #         return StreamingHttpResponse(

@@ -31,14 +31,11 @@ urlpatterns = [
       path('eliminar-video/', views.eliminar_video, name='eliminar_video'),
     path('eliminar-videos/', views.eliminar_videos, name='eliminar_videos'),
 
-
-    # pruebas 
-     path('video-feed/<int:camera_id>/', views.video_feed_flexible, name='video-feed'),
-    
-    # Endpoints para reconocimiento facial (Thunder Client)
-    path('recognition/status/', views.recognition_status, name='recognition-status'),
-    path('recognition/send-test-notification/', views.send_test_notification, name='send-test-notification'),
-    path('recognition/recent-detections/', views.get_recent_detections, name='recent-detections'),
-    path('recognition/update-thresholds/', views.update_thresholds, name='update-thresholds'),
-    path('recognition/register-unknown-face/', views.register_unknown_face, name='register-unknown-face'),
+path('api/test/face-detection/', views.test_face_detection_api, name='test_face_detection'),
+    path('api/test/telegram-notification/', views.test_telegram_notification_api, name='test_telegram_notification'),
+    # path('recognition/status/', views.recognition_status, name='recognition-status'),
+    # path('recognition/send-test-notification/', views.send_test_notification, name='send-test-notification'),
+    # path('recognition/recent-detections/', views.get_recent_detections, name='recent-detections'),
+    # path('recognition/update-thresholds/', views.update_thresholds, name='update-thresholds'),
+    # path('recognition/register-unknown-face/', views.register_unknown_face, name='register-unknown-face'),
 ]

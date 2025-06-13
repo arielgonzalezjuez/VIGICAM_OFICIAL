@@ -22,3 +22,19 @@ class ClienteActualizarForm(UserChangeForm):
         model = Cliente
         fields = ('username', 'first_name', 'last_name', 'email', 'telefono', 'direccion')
    
+class TelegramForm(forms.ModelForm):
+    class Meta:
+        model = Cliente
+        fields = ['telegram_chat_id']
+        widgets = {
+            'telegram_chat_id': forms.TextInput(attrs={
+                'placeholder': 'Ej: 123456789',
+                'class': 'form-input'
+            })
+        }
+        labels = {
+            'telegram_chat_id': 'Chat ID de Telegram para notificaciones'
+        }
+        help_texts = {
+            'telegram_chat_id': 'Obtén tu ID con @userinfobot en Telegram'
+        }
