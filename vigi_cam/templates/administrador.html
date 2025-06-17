@@ -272,8 +272,11 @@
             <!-- Campo nombre -->
             <div class="form-row">
               <span class="required">*</span>
-              <span class="label">Nombre de Administrador</span>
-              <input type="text" class="text-input" required name="username" id="id_username">
+              <span class="label">Nombre de Usuario del Administrador</span>
+              <input type="text" class="text-input" required name="username" id="id_username"
+    minlength="2"
+    maxlength="50"
+    title="Mínimo 2 letras, máximo 50.">
             </div>
             <div class="form-row password-row" style="display: none;">
               <span class="label-spacer"></span>

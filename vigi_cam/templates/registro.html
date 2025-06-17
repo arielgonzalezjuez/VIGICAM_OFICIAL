@@ -1404,6 +1404,38 @@ th:hover {
   background-color: rgba(0, 0, 0, 0.5);
   z-index: 999;
 }
+
+.error-message {
+    color: #dc2626;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    display: none;
+}
+
+.table-button:hover {
+    background-color: #3a3e45;
+    color: white;
+}
+
+.table-button.pdf-button {
+    background-color: #1e1e1e;
+    border: 1px solid #444;
+}
+
+.table-button.pdf-button:hover {
+    background-color: #dc2626;
+    color: white;
+}
+
+.table-button.pdf-button {
+    background-color: #dc2626;
+    color: white;
+    border: none;
+}
+
+.table-button.pdf-button:hover {
+    background-color: #b91c1c;
+}
     </style>
   </head>
   <body>
@@ -1615,18 +1647,26 @@ th:hover {
   </svg>
   Filtrar
 </button>
+<button class="table-button pdf-button" id="exportPdfButton">
+    <svg class="icon" viewBox="0 0 24 24" width="14" height="14">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" fill="none" stroke="currentColor" stroke-width="2"/>
+        <polyline points="7 10 12 15 17 10" fill="none" stroke="currentColor" stroke-width="2"/>
+        <line x1="12" y1="15" x2="12" y2="3" fill="none" stroke="currentColor" stroke-width="2"/>
+    </svg>
+    Exportar PDF
+</button>
           </div>
           
           <!-- Search -->
-          <div class="search-container">
-            <div class="search-box">
-              <input type="text" class="search-input" id="searchInput" placeholder="Buscar" />
-              <svg class="icon search-icon" viewBox="0 0 24 24" width="16" height="16">
-                <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-          </div>
+<div class="search-container">
+  <div class="search-box">
+    <input type="text" class="search-input" id="searchInput" placeholder="Buscar por nombre o fecha (YYYY-MM-DD)" />
+    <svg class="icon search-icon" viewBox="0 0 24 24" width="16" height="16">
+      <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+</div>
           
         </div>
 
@@ -1758,18 +1798,18 @@ th:hover {
       <button class="filter-modal-close" id="closeFilterModal">&times;</button>
     </div>
     <div class="filter-options">
-      <div class="filter-option" data-filter="all">
-        <input type="radio" name="filterOption" id="filterAll" checked>
-        <label for="filterAll">Todos los registros</label>
-      </div>
-      <div class="filter-option" data-filter="trabajadores">
-        <input type="radio" name="filterOption" id="filterTrabajadores">
-        <label for="filterTrabajadores">Solo trabajadores</label>
-      </div>
-      <div class="filter-option" data-filter="desconocidos">
-        <input type="radio" name="filterOption" id="filterDesconocidos">
-        <label for="filterDesconocidos">Solo desconocidos</label>
-      </div>
+   <div class="filter-option" data-filter="all">
+    <input type="radio" name="filterOption" id="filterAll" value="all" checked>
+    <label for="filterAll">Todos los registros</label>
+</div>
+<div class="filter-option" data-filter="trabajadores">
+    <input type="radio" name="filterOption" id="filterTrabajadores" value="trabajadores">
+    <label for="filterTrabajadores">Solo trabajadores</label>
+</div>
+<div class="filter-option" data-filter="desconocidos">
+    <input type="radio" name="filterOption" id="filterDesconocidos" value="desconocidos">
+    <label for="filterDesconocidos">Solo desconocidos</label>
+</div>
     </div>
     <div class="filter-modal-footer">
       <button class="outline-button" id="cancelFilter">Cancelar</button>
@@ -1785,6 +1825,7 @@ th:hover {
   const deleteButtons = document.querySelectorAll(".delete-button");
   const searchInput = document.getElementById("searchInput");
   const filterModalOverlay = document.getElementById("filterModalOverlay");
+
 
   // Inicialización
   document.addEventListener('DOMContentLoaded', function() {
@@ -1816,6 +1857,29 @@ th:hover {
       option.addEventListener('click', handleFilterSelection);
     });
     
+   document.getElementById('exportPdfButton')?.addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        // Obtener el filtro actual
+        let filtroActual = 'all';
+        const filtroSeleccionado = document.querySelector('input[name="filterOption"]:checked');
+        if (filtroSeleccionado) {
+            filtroActual = filtroSeleccionado.value;
+        }
+        
+        // También considera el texto de búsqueda si es necesario
+        const searchTerm = document.getElementById('searchInput').value;
+        
+        // Construir URL con parámetros
+        let url = `/generar_pdf_registros/?filtro=${filtroActual}`;
+        
+        if (searchTerm) {
+            url += `&search=${encodeURIComponent(searchTerm)}`;
+        }
+        
+        window.location.href = url;
+    });
+
     // Modales
     document.querySelectorAll(".modal-overlay-filter, .image-modal-overlay").forEach(modal => {
       modal.addEventListener('click', e => e.target === modal && modal.classList.add('hidden'));
@@ -1878,20 +1942,25 @@ th:hover {
   }
 
   // Manejar búsqueda
-  function handleSearch() {
-    const term = this.value.toLowerCase();
-    const rows = document.querySelectorAll('tbody tr[data-id]');
+// Manejar búsqueda
+// Manejar búsqueda
+function handleSearch() {
+  const term = this.value.toLowerCase().trim();
+  const rows = document.querySelectorAll('tbody tr[data-id]');
+  
+  rows.forEach(row => {
+    const nombre = row.querySelector('td:nth-child(4)')?.textContent.toLowerCase() || '';
+    const fechaHora = row.querySelector('td:nth-child(5)')?.textContent || '';
     
-    rows.forEach(row => {
-      const match = Array.from(row.children).some((cell, index) => {
-        return index > 1 && cell.textContent.toLowerCase().includes(term); // Excluir checkbox e imagen
-      });
-      row.style.display = match ? '' : 'none';
-    });
+    // Buscar en ambos campos
+    const match = nombre.includes(term) || fechaHora.includes(term);
     
-    updateVisibleCount();
-    checkEmptyState();
-  }
+    row.style.display = match ? '' : 'none';
+  });
+  
+  updateVisibleCount();
+  checkEmptyState();
+}
 
   // Manejar filtros
   function handleFilterSelection(e) {
@@ -2077,6 +2146,64 @@ async function handleDeleteSelected() {
   });
 });
 
+   </script>
+   <script>
+    // Agrega esto al final de tu script existente
+document.addEventListener('DOMContentLoaded', function() {
+    // Validación del campo edit_telegram
+    const telegramInput = document.querySelector('input[name="edit_telegram"]');
+    
+    if (telegramInput) {
+        // Función para validar el ID de Telegram
+        function validateTelegramId(value) {
+            // Expresión regular para validar:
+            // - Solo números
+            // - Mínimo 5 dígitos (IDs reales de Telegram son más largos)
+            // - Máximo 12 dígitos (para IDs de grupos/canales que empiezan con -100)
+            const telegramIdRegex = /^-?\d{5,12}$/;
+            return telegramIdRegex.test(value);
+        }
+
+        // Validar antes de enviar el formulario
+        document.querySelector('form')?.addEventListener('submit', function(e) {
+            const telegramId = telegramInput.value;
+            
+            if (!validateTelegramId(telegramId)) {
+                e.preventDefault();
+                alert('El ID de Telegram debe ser numérico y tener entre 5 y 12 dígitos');
+                return false;
+            }
+            
+            return true;
+        });
+
+        // También puedes validar si el valor cambia dinámicamente
+        telegramInput.addEventListener('change', function() {
+            if (!validateTelegramId(this.value)) {
+                console.error('Valor no válido para ID de Telegram');
+                // Puedes limpiar el valor o tomar otra acción
+                this.value = '';
+            }
+        });
+    }
+});
+const errorMessage = document.createElement('div');
+errorMessage.className = 'error-message';
+errorMessage.textContent = 'El ID de Telegram debe ser numérico y tener entre 5 y 12 dígitos';
+telegramInput.insertAdjacentElement('afterend', errorMessage);
+
+document.querySelector('form')?.addEventListener('submit', function(e) {
+    const telegramId = telegramInput.value;
+    
+    if (!validateTelegramId(telegramId)) {
+        e.preventDefault();
+        errorMessage.style.display = 'block';
+        return false;
+    }
+    
+    errorMessage.style.display = 'none';
+    return true;
+});
    </script>
   </body>
 </html>

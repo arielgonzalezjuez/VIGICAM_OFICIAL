@@ -31,6 +31,7 @@ urlpatterns = [
       path('eliminar-video/', views.eliminar_video, name='eliminar_video'),
     path('eliminar-videos/', views.eliminar_videos, name='eliminar_videos'),
 
+     path('generar_pdf_registros/', views.generar_pdf_registros, name='generar_pdf_registros'),
 path('api/test/face-detection/', views.test_face_detection_api, name='test_face_detection'),
     path('api/test/telegram-notification/', views.test_telegram_notification_api, name='test_telegram_notification'),
     # path('recognition/status/', views.recognition_status, name='recognition-status'),

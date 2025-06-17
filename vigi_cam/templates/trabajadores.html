@@ -1721,15 +1721,17 @@ th:hover {
                       <span class="required">*</span>
                       <span>Nombre</span>
                     </label>
-                    <input 
-                      type="text" 
-                      class="form-input" 
-                      required
-                      name="nombre"
-                      id="add_nombre"
-                      pattern="[A-Za-zÁÉÍÓÚáéíóúñÑ ]+"
-  title="Solo se permiten letras y espacios"
-                    />
+   <input 
+    type="text" 
+    class="form-input" 
+    required
+    name="nombre"
+    id="add_nombre"
+    pattern="[A-Za-zÁÉÍÓÚáéíóúñÑ\s]+"
+    minlength="2"
+    maxlength="50"
+    title="Mínimo 2 letras, máximo 50. Solo se permiten letras y espacios."
+/>
                     <div class="error-message" id="add_nombre_error"></div>
                   </div>
         
@@ -1862,8 +1864,10 @@ th:hover {
                       required
                       name="nombre"
                       id="edit_nombre"
-                        pattern="[A-Za-zÁÉÍÓÚáéíóúñÑ ]+"
-  title="Solo se permiten letras y espacios"
+                        pattern="[A-Za-zÁÉÍÓÚáéíóúñÑ\s]+"
+    minlength="2"
+    maxlength="50"
+    title="Mínimo 2 letras, máximo 50. Solo se permiten letras y espacios."
 
                     />
                     <div class="error-message" id="edit_nombre_error"></div>

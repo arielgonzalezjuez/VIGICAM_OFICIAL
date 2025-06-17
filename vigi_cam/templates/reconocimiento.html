@@ -1301,7 +1301,10 @@
              {{ form.as_p }} 
               <div class="form-group">
                 <label for="id_nombreC">Nombre/Ubicación:</label>
-                <input type="text" id="id_nombreC" name="nombreC" required>
+                <input type="text" id="id_nombreC" name="nombreC" required  pattern="[A-Za-zÁÉÍÓÚáéíóúñÑ\s]+"
+    minlength="2"
+    maxlength="50"
+    title="Mínimo 2 letras, máximo 50. Solo se permiten letras y espacios.">
             </div>
             <div class="form-group">
                 <label for="id_numero_ip">Dirección IP:</label>

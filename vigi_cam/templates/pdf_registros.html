@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Registros de Acceso</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        h1 { color: #333; text-align: center; }
+        .info { margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .footer { margin-top: 20px; text-align: right; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <h1>Registros de Acceso</h1>
+    
+    <div class="info">
+        <p><strong>Filtro aplicado:</strong> 
+            {% if filtro_actual == 'all' %}Todos los registros
+            {% elif filtro_actual == 'trabajadores' %}Solo trabajadores
+            {% else %}Solo desconocidos{% endif %}
+        </p>
+        <p><strong>Total registros:</strong> {{ total_registros }}</p>
+        <p><strong>Generado el:</strong> {% now "DATETIME_FORMAT" %}</p>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Fecha y Hora</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for registro in registros %}
+            <tr>
+                <td>{{ registro.pk }}</td>
+                <td>{% if registro.persona %}{{ registro.persona.nombre }}{% else %}Desconocido{% endif %}</td>
+                <td>{{ registro.fecha_hora }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="footer">
+        <p>Sistema VigiCam - {% now "Y" %}</p>
+    </div>
+</body>
+</html>

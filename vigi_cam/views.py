@@ -451,6 +451,58 @@ def eliminar_registro(request, id_registro):
 def eliminarregistros(request):
      RegistroAcceso.objects.all().delete()
      return redirect('registro')
+
+from django.http import HttpResponse
+from django.template.loader import get_template
+from xhtml2pdf import pisa
+from io import BytesIO
+from .models import RegistroAcceso
+from django.db.models import Q
+
+
+@login_required
+def generar_pdf_registros(request):
+    # Obtener parámetros de filtro de la URL
+    filtro = request.GET.get('filtro', 'all')
+    search_term = request.GET.get('search', '')
+    
+    # Aplicar filtros como en tu vista principal
+    registros = RegistroAcceso.objects.all().order_by('-fecha_hora')
+    
+    if filtro == 'trabajadores':
+        registros = registros.filter(persona__isnull=False)  # Solo registros con persona asociada
+    elif filtro == 'desconocidos':
+        registros = registros.filter(persona__isnull=True)
+    
+    if search_term:
+        registros = registros.filter(
+            Q(persona__nombre__icontains=search_term) | 
+            Q(fecha_hora__icontains=search_term) |
+            Q(pk__icontains=search_term)
+        )
+
+    # Contexto para el template
+    context = {
+        'registros': registros,
+        'filtro_actual': filtro,
+        'total_registros': registros.count()
+    }
+    
+    # Renderizar template
+    template = get_template('pdf_registros.html')
+    html = template.render(context)
+    
+    # Crear PDF
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="registros_acceso.pdf"'
+    
+    # Generar PDF
+    pisa_status = pisa.CreatePDF(html, dest=response)
+    
+    if pisa_status.err:
+        return HttpResponse('Error al generar PDF', status=500)
+    
+    return response
 # Finaliza el Trabajo con los registros de la camara
 
 
@@ -1261,8 +1313,10 @@ def enviar_notificacion_personalizada(imagen_path, mensaje):
     for usuario in usuarios:
         try:
             url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendPhoto"
+            print(url)
             with open(imagen_path, 'rb') as foto:
                 files = {'photo': foto}
+                print(usuario.telegram_chat_id)
                 data = {
                     'chat_id': usuario.telegram_chat_id,
                     'caption': mensaje[:1024],
