@@ -89,13 +89,27 @@ class RegistroAcceso(models.Model):
     def _str_(self):
         return f'{self.persona.nombre} - {self.fecha_hora}'
 
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
 class Cliente(AbstractUser):
-      direccion = models.CharField(max_length=200)
-      telefono = models.CharField(max_length=20)
-      telegram_chat_id = models.CharField(max_length=50, blank=True, null=True,verbose_name="Chat ID de Telegram") 
-      
-      def __str__(self):
-          return self.first_name
+    class Rol(models.TextChoices):
+        ADMINISTRADOR = 'administrador', 'Administrador'
+        USUARIO = 'usuario', 'Usuario'
+        USUARIO_BENEFICIOS = 'usuario_con_beneficios', 'Usuario con beneficios'
+    
+    direccion = models.CharField(max_length=200)
+    telefono = models.CharField(max_length=20)
+    telegram_chat_id = models.CharField(max_length=50, blank=True, null=True, verbose_name="Chat ID de Telegram")
+    rol = models.CharField(
+        max_length=22,
+        choices=Rol.choices,
+        default=Rol.USUARIO,
+        verbose_name="Rol del usuario"
+    )
+    
+    def __str__(self):
+        return self.username
       
 class Video(models.Model):
     title = models.CharField(max_length=255)

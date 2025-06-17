@@ -60,7 +60,20 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from django.http import HttpResponseForbidden
 
+def role_required(*allowed_roles):
+    def decorator(view_func):
+        def wrapped_view(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return redirect('login')
+            
+            if request.user.rol not in allowed_roles:
+                return HttpResponseForbidden("No tienes permiso para acceder a esta página")
+            
+            return view_func(request, *args, **kwargs)
+        return wrapped_view
+    return decorator
 # ------------------------- AUTENTICACIÓN Y USUARIOS -------------------------
 
 
@@ -99,8 +112,9 @@ def cerrarSession(request):
 # - Punto de entrada después del login exitoso
 # - Renderiza la plantilla index.html con el contexto básico
 # - No requiere lógica adicional ya que es una vista estática inicial
+@login_required
 def index(request):
-    return render(request, 'index.html')
+    return render(request, 'index.html',{'user_rol': request.user.rol if request.user.is_authenticated else None})
 
 # Controla la página "Acerca de", gestionando los horarios laborales (crea defaults si no existen, permite edición para staff y agrupa días con mismos horarios) y mostrando la información organizada al usuario, renderizando 'about.html' con los horarios agrupados e individuales.
 @login_required
@@ -226,27 +240,6 @@ def inicio_sesion(request):
             login(request,cliente)
             return redirect('index')
 
-@login_required
-def administrador(request):
-    administradores = Cliente.objects.all().order_by('username')
-    return render(request, 'administrador.html',{'administradores':administradores})
-
-def registrarAdminFirstTime(request):
-    if request.method == 'GET':
-        return render(request, 'sign_up.html', {'form': UserCreationForm})
-    else:
-        if request.POST['password1'] == request.POST['password2']:
-            try:
-                user = User.objects.create_user(username=request.POST['username'], password=request.POST['password1'])
-                user.save()
-                login(request,user)
-                return redirect('index')
-            except IntegrityError:
-                return render(request, 'sign_up.html', {'form': UserCreationForm, 'error':'Usuario ya existente'})
-        return render(request, 'sign_up.html', {'form': UserCreationForm, 'error':'Contraseñas Incorrectas'})
-
-
-
 
 # ==================== GESTIÓN DE ADMINISTRADORES ====================
 
@@ -255,97 +248,133 @@ def registrarAdminFirstTime(request):
 # - Utiliza el modelo Cliente (asumiendo que hereda de User)
 # - Renderiza plantilla 'administrador.html' con lista de administradores
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def administrador(request):
     administradores = Cliente.objects.all().order_by('username')
     return render(request, 'administrador.html',{'administradores':administradores})
 
 def registrarAdminFirstTime(request):
     if request.method == 'GET':
-        return render(request, 'sign_up.html', {'form': UserCreationForm})
+        return render(request, 'sign_up.html', {
+            'roles': Cliente.Rol.choices  # Pasamos las opciones de rol al template
+        })
     else:
         if request.POST['password1'] == request.POST['password2']:
             try:
-                user = User.objects.create_user(username=request.POST['username'], password=request.POST['password1'])
+                # Creamos el usuario con el rol especificado
+                user = Cliente.objects.create_user(
+                    username=request.POST['username'],
+                    password=request.POST['password1'],
+                    first_name=request.POST.get('first_name', ''),
+                    last_name=request.POST.get('last_name', ''),
+                    rol=request.POST.get('rol', Cliente.Rol.USUARIO)  # Rol por defecto: USUARIO
+                )
                 user.save()
-                login(request,user)
+                login(request, user)
                 return redirect('index')
             except IntegrityError:
-                return render(request, 'sign_up.html', {'form': UserCreationForm, 'error':'Usuario ya existente'})
-        return render(request, 'sign_up.html', {'form': UserCreationForm, 'error':'Contraseñas Incorrectas'})
+                return render(request, 'sign_up.html', {
+                    'error': 'Usuario ya existente',
+                    'roles': Cliente.Rol.choices
+                })
+        return render(request, 'sign_up.html', {
+            'error': 'Contraseñas no coinciden',
+            'roles': Cliente.Rol.choices
+        })
+
+from django.http import JsonResponse
+from django.contrib.auth import get_user_model
+from django.views.decorators.http import require_POST
 
 User = get_user_model()
-@require_http_methods(["GET", "POST"])
+
+@require_POST
+def get_admin_data(request, admin_id):
+    try:
+        admin = Cliente.objects.get(pk=admin_id)
+        return JsonResponse({
+            'success': True,
+            'data': {
+                'id': admin.id,
+                'username': admin.username,
+                'rol': admin.rol
+            }
+        })
+    except Cliente.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Admin no encontrado'}, status=404)
+
+@require_POST
 def registrar_admin(request):
-    if request.method == 'POST':
-        username = request.POST.get('username', '').strip()
-        password = request.POST.get('password', '').strip()
+    username = request.POST.get('username', '').strip()
+    password = request.POST.get('password', '').strip()
+    rol = request.POST.get('rol', 'usuario')
 
-        # Validaciones
-        if not username:
-            return JsonResponse({'success': False, 'message': 'El nombre de usuario es requerido'})
-        if User.objects.filter(username=username).exists():
-            return JsonResponse({'success': False, 'message': 'Este nombre de usuario ya está en uso'})
-        if not password:
-            return JsonResponse({'success': False, 'message': 'La contraseña es requerida'})
-        if len(password) < 8:
-            return JsonResponse({'success': False, 'message': 'La contraseña debe tener al menos 8 caracteres'})
+    if not username:
+        return JsonResponse({'success': False, 'message': 'El nombre de usuario es requerido'}, status=400)
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({'success': False, 'message': 'Este nombre de usuario ya está en uso'}, status=400)
+    if not password:
+        return JsonResponse({'success': False, 'message': 'La contraseña es requerida'}, status=400)
 
-        # Creación
-        try:
-            user = User.objects.create_user(username=username, password=password)
-            return JsonResponse({'success': True})
-        except Exception as e:
-            return JsonResponse({'success': False, 'message': f'Error al crear el usuario: {str(e)}'})
+    try:
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            rol=rol
+        )
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
-    # GET: mostrar lista completa
-    administradores = User.objects.all()
-    return render(request, 'administrador.html', {
-        'administradores': administradores
-    })
-
-# Vista para edición de administradores (vía AJAX/POST)
-# - Busca admin por ID (devuelve error 404 si no existe)
-# - Valida: username requerido, único y password (si se provee) >= 8 chars
-# - Actualiza username y password (este último con encriptación)
-# - Retorna JSON con éxito/error para procesamiento frontend
 @require_POST
 def editar_admin(request, admin_id):
     try:
         admin = User.objects.get(pk=admin_id)
     except User.DoesNotExist:
-        return JsonResponse({'success': False, 'message': 'Administrador no encontrado'})
+        return JsonResponse({'success': False, 'message': 'Administrador no encontrado'}, status=404)
 
-    new_username = request.POST.get('username', '').strip()
+    username = request.POST.get('username', '').strip()
     password = request.POST.get('password', '').strip()
+    rol = request.POST.get('rol', admin.rol)
 
-    # Validaciones
-    if not new_username:
-        return JsonResponse({'success': False, 'message': 'El nombre de usuario es requerido'})
-    if User.objects.exclude(pk=admin_id).filter(username=new_username).exists():
-        return JsonResponse({'success': False, 'message': 'Este nombre de usuario ya está en uso'})
+    if not username:
+        return JsonResponse({'success': False, 'message': 'El nombre de usuario es requerido'}, status=400)
+    if User.objects.exclude(pk=admin_id).filter(username=username).exists():
+        return JsonResponse({'success': False, 'message': 'Este nombre de usuario ya está en uso'}, status=400)
 
-    if password and len(password) < 8:
-        return JsonResponse({'success': False, 'message': 'La contraseña debe tener al menos 8 caracteres'})
-
-    # Actualización
-    admin.username = new_username
-    if password:
-        admin.set_password(password)
-    admin.save()
-    return JsonResponse({'success': True})
-
-# Vista para eliminar administradores (POST-only)
-# - Elimina admin por ID usando get_object_or_404
-# - Maneja errores y retorna JSON apropiado
-# - Protegida por decorador @require_POST para seguridad
-@require_POST
-def eliminar_administrador(request, id_administrador):
     try:
-        admin = get_object_or_404(User, pk=id_administrador)
-        admin.delete()
+        admin.username = username
+        admin.rol = rol
+        if password:
+            admin.set_password(password)
+        admin.save()
         return JsonResponse({'success': True})
     except Exception as e:
-        return JsonResponse({'success': False, 'message': f'Error al eliminar: {str(e)}'})
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+    
+@require_POST
+def eliminar_admin(request, admin_id):
+    try:
+        admin = User.objects.get(pk=admin_id)
+        if admin.is_superuser:
+            return JsonResponse({
+                'success': False, 
+                'message': 'No se pueden eliminar superusuarios'
+            }, status=403)
+            
+        admin.delete()
+        return JsonResponse({'success': True})
+        
+    except User.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Administrador no encontrado'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': str(e)
+        }, status=500)
 
 # Vista para búsqueda de administradores (GET-only)
 # - Busca admins por coincidencia parcial en username (case-insensitive)
@@ -371,6 +400,7 @@ def buscar_admin(request):
 # - Retorna todos los registros de Persona ordenados por nombre
 # - Renderiza plantilla 'trabajadores.html' con lista de personas
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR, Cliente.Rol.USUARIO_BENEFICIOS)
 def trabajadores(request):
     personas = Persona.objects.all().order_by('nombre')
     return render(request, 'trabajadores.html', {'personas': personas})
@@ -381,6 +411,7 @@ def trabajadores(request):
 # - Redirige al listado de trabajadores tras registro exitoso
 # - Reutiliza plantilla 'trabajadores.html' para formulario de registro
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def registrar_persona(request):
     title = 'Registrar Persona'
     if request.method == 'POST':
@@ -398,6 +429,7 @@ def registrar_persona(request):
 # - Usa PersonaForm con instancia existente para updates
 # - Mantiene consistencia en redirección y plantillas
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def editar_persona(request, id_persona):
     title = 'Editar Persona'
     persona = get_object_or_404(Persona, pk=id_persona)
@@ -415,6 +447,7 @@ def editar_persona(request, id_persona):
 # - Redirección inmediata sin confirmación (considerar implementar modal)
 # - Operación irreversible - considerar soft delete en futuras versiones
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def eliminar_persona(request, id_persona):
     persona = get_object_or_404(Persona, pk=id_persona)
     persona.delete()
@@ -429,6 +462,7 @@ def eliminar_persona(request, id_persona):
 # - No requiere autenticación (considerar agregar @login_required)
 # - Renderiza plantilla 'registro.html' con los registros
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR, Cliente.Rol.USUARIO, Cliente.Rol.USUARIO_BENEFICIOS)
 def registro(request):
      registros = RegistroAcceso.objects.all().order_by('-fecha_hora')
      return render(request, 'registro.html', {'registros': registros})
@@ -438,6 +472,7 @@ def registro(request):
 # - Elimina registro por ID (404 si no existe)
 # - Redirige al listado de registros
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def eliminar_registro(request, id_registro):
     registro = get_object_or_404(RegistroAcceso, pk=id_registro)
     registro.delete()
@@ -448,6 +483,7 @@ def eliminar_registro(request, id_registro):
 # - Elimina todos los registros sin confirmación (considerar implementar confirmación)
 # - Redirige al listado de registros
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def eliminarregistros(request):
      RegistroAcceso.objects.all().delete()
      return redirect('registro')
@@ -505,13 +541,13 @@ def generar_pdf_registros(request):
     return response
 # Finaliza el Trabajo con los registros de la camara
 
-
-
 # ==================== GESTIÓN DE CÁMARAS ====================
 
 # Vista para listado de cámaras
 # - Muestra todas las cámaras ordenadas por nombre
 # - Renderiza plantilla 'reconocimiento.html' con el listado
+@login_required
+@role_required(Cliente.Rol.ADMINISTRADOR, Cliente.Rol.USUARIO_BENEFICIOS)
 def cameras(request):
     camaras = Camara.objects.all().order_by('nombreC')
     return render(request, 'reconocimiento.html',{'camaras': camaras})
@@ -523,6 +559,7 @@ def cameras(request):
 # - Maneja errores de validación apropiadamente
 @login_required
 @require_POST
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def registrar_camara(request):
     form = CamaraForm(request.POST)
     if form.is_valid():
@@ -542,6 +579,7 @@ def registrar_camara(request):
 # - Maneja errores de validación con códigos HTTP apropiados
 @login_required
 @require_POST
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def editar_camara(request, id_camara):
     camara = get_object_or_404(Camara, pk=id_camara)
     form = CamaraForm(request.POST, instance=camara)
@@ -558,6 +596,7 @@ def editar_camara(request, id_camara):
 # - Elimina cámara por ID (maneja errores)
 # - Retorna JSON con estado de la operación
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def eliminar_camara(request, id_camara):
     camara = get_object_or_404(Camara, pk=id_camara)
     try:
@@ -571,6 +610,7 @@ def eliminar_camara(request, id_camara):
 # - Muestra todas las cámaras disponibles
 # - Renderiza plantilla 'reconocimiento.html'
 @login_required
+@role_required(Cliente.Rol.ADMINISTRADOR, Cliente.Rol.USUARIO_BENEFICIOS)
 def reconocimiento_facial(request):
      cameras = Camara.objects.all()
      return render(request, 'reconocimiento.html', {'camaras': cameras})
@@ -586,6 +626,8 @@ def reconocimiento_facial(request):
 # - Muestra todos los videos disponibles
 # - Calcula conteo total de videos
 # - Renderiza plantilla 'videos.html' con listado y conteo
+@login_required
+@role_required(Cliente.Rol.ADMINISTRADOR, Cliente.Rol.USUARIO_BENEFICIOS)
 def videos(request):
     videos = Video.objects.all()
     count = 0
@@ -598,6 +640,8 @@ def videos(request):
 # - Requiere método GET (@require_GET)
 # - Elimina videos por lista de IDs (separados por comas)
 # - Retorna JSON con estado de la operación
+@login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 @require_GET
 def eliminar_video(request):
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -614,6 +658,8 @@ def eliminar_video(request):
 # - Requiere método GET (considerar cambiarlo a POST)
 # - Elimina todos los videos sin confirmación
 # - Muestra mensaje flash y redirige al listado
+@login_required
+@role_required(Cliente.Rol.ADMINISTRADOR)
 def eliminar_videos(request):
     if request.method == 'GET':
         Video.objects.all().delete()
@@ -1596,6 +1642,7 @@ def robust_video_gen(camera_id=None):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@role_required(Cliente.Rol.ADMINISTRADOR, Cliente.Rol.USUARIO_BENEFICIOS)
 def video_feed_flexible(request, camera_id):
     """Endpoint que devuelve streaming o JSON según el header 'Accept'"""
     if request.accepted_media_type == 'application/json':

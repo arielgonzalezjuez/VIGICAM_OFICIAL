@@ -8,6 +8,8 @@
     <title>Vigi Cam</title>
     <link rel="shortcut icon" href="{% static "images/favicon.ico" %}" type="image/x-icon">
     <link rel="stylesheet" href="{% static "css/administrador.css" %}" />
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+
   </head>
   <body>
     {% csrf_token %}
@@ -272,12 +274,21 @@
             <!-- Campo nombre -->
             <div class="form-row">
               <span class="required">*</span>
-              <span class="label">Nombre de Usuario del Administrador</span>
+              <span class="label">Nombre de Usuario</span>
               <input type="text" class="text-input" required name="username" id="id_username"
     minlength="2"
     maxlength="50"
     title="Mínimo 2 letras, máximo 50.">
             </div>
+             <div class="form-row">
+          <span class="required">*</span>
+          <span class="label">Rol</span>
+          <select class="text-input" required name="rol" id="id_rol">
+    <option value="administrador">Administrador</option>
+    <option value="usuario">Trabajadores</option>
+    <option value="usuario_con_beneficios">Supervisor</option>
+</select>
+        </div>
             <div class="form-row password-row" style="display: none;">
               <span class="label-spacer"></span>
               <span class="label">Contraseña</span>
@@ -421,122 +432,328 @@
     </div>
 
     <script src="{% static "js/administrador.js" %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-      document.addEventListener("DOMContentLoaded", function() {
-        // Obtener parámetros de la URL
-        const urlParams = new URLSearchParams(window.location.search);
-        
-        // Si el parámetro showAddModal está presente
-        if (urlParams.get('showAddModal') === 'true') {
-            // Simular clic en el botón de añadir
-            document.querySelector('.add-btn').click();
-            
-            // Limpiar la URL después de abrir el modal
-            window.history.replaceState({}, document.title, window.location.pathname);
-        }
-    });
-
-    // Manejar clic en botón Añadir
-document.querySelector('.add-btn').addEventListener('click', function() {
-  // Limpiar formulario
-  document.getElementById('admin-id').value = '';
-  document.getElementById('id_username').value = '';
-  document.getElementById('id_password').value = '';
-  
-  // Mostrar campo de contraseña
-  document.querySelector('.password-row').style.display = 'flex';
-  
-  // Enfocar el primer campo
-  document.getElementById('id_username').focus();
-});
-    </script>
-    <script>
-      document.addEventListener("DOMContentLoaded", function () {
+   document.addEventListener("DOMContentLoaded", function() {
     // Elementos del DOM
     const menuToggle = document.querySelector(".menu-toggle");
     const sidebar = document.querySelector(".sidebar");
     const menuItems = document.querySelectorAll(".menu-item");
-  
+    const showListBtn = document.querySelector('.show-list-btn');
+    const userListPanel = document.querySelector('.user-list-panel');
+    const closePanelBtn = document.querySelector('.close-panel-btn');
+    const addBtn = document.querySelector('.add-btn');
+    const deleteBtn = document.querySelector('#delete-admin-btn');
+    const saveBtn = document.querySelector('.save-btn');
+    const passwordBtn = document.querySelector('.password-btn');
+    const searchInput = document.querySelector('.search-input');
+    const userItems = document.querySelectorAll('.user-item');
+    const logoutIcon = document.querySelector('.logout-icon');
+
+    // Variables de estado
+    let selectedAdminId = null;
+
     // Función para cerrar todos los menús
     function closeAllMenus() {
-      sidebar.classList.remove("active");
+        sidebar.classList.remove("active");
     }
-  
+
     // Toggle del menú sidebar
-    menuToggle.addEventListener("click", function (e) {
-      e.stopPropagation();
-      sidebar.classList.toggle("active");
+    menuToggle?.addEventListener("click", function(e) {
+        e.stopPropagation();
+        sidebar.classList.toggle("active");
     });
-  
+
     // Cerrar menú al seleccionar una opción del sidebar
     menuItems.forEach((item) => {
-      item.addEventListener("click", function () {
-        if (window.innerWidth <= 1024) {
-          sidebar.classList.remove("active");
-        }
-      });
+        item.addEventListener("click", function() {
+            if (window.innerWidth <= 1024) {
+                sidebar.classList.remove("active");
+            }
+        });
     });
-  
+
     // Cerrar menús al hacer clic fuera
-    document.addEventListener("click", function (e) {
-      // Solo cerrar si no se hizo clic en ningún elemento de control
-      if (
-        !e.target.closest(
-          ".menu-toggle, .sidebar, .user-dropdown, .user-dropdown-menu"
-        )
-      ) {
-        closeAllMenus();
-      }
+    document.addEventListener("click", function(e) {
+        if (!e.target.closest(".menu-toggle, .sidebar, .user-dropdown, .user-dropdown-menu")) {
+            closeAllMenus();
+        }
     });
-  
-    // Ajustar el sidebar al cambiar tamaño de pantalla
-    window.addEventListener("resize", function () {
-      if (window.innerWidth > 1024) {
-        sidebar.classList.remove("active");
-      }
-    });
-  });
-  
-     </script>
-     <script>
-      // Mostrar/ocultar panel de administradores en móvil
-document.addEventListener("DOMContentLoaded", function () {
-  const showListBtn = document.querySelector('.show-list-btn');
-  const userListPanel = document.querySelector('.user-list-panel');
-  const closePanelBtn = document.querySelector('.close-panel-btn');
-
-  // Toggle del panel
-  showListBtn?.addEventListener('click', () => {
-    userListPanel.classList.add('active');
-  });
-
-  closePanelBtn?.addEventListener('click', () => {
-    userListPanel.classList.remove('active');
-  });
-
-  // Cerrar panel al hacer clic fuera
-// En el evento click fuera del panel
-document.addEventListener('click', (e) => {
-  if (window.innerWidth <= 768) {
-    const isClickInside = userListPanel.contains(e.target) || 
-                         e.target.closest('.show-list-btn');
-    
-    // Cerrar solo si se hizo click en el área oscura (fondo)
-    if (!isClickInside && 
-        e.target.closest('.user-list-panel') === null && 
-        !e.target.closest('.show-list-btn')) {
-      userListPanel.classList.remove('active');
+// Botón para mostrar/ocultar campo de contraseña - Versión mejorada
+document.addEventListener('click', function(e) {
+    if (e.target.closest('.password-btn')) {
+        const passwordRow = document.querySelector('.password-row');
+        const passwordBtn = e.target.closest('.password-btn');
+        
+        if (passwordRow.style.display === 'none' || passwordRow.style.display === '') {
+            passwordRow.style.display = 'flex';
+            passwordBtn.textContent = 'Ocultar Contraseña';
+            // Enfocar el campo de contraseña cuando se muestra
+            document.getElementById('id_password').focus();
+        } else {
+            passwordRow.style.display = 'none';
+            passwordBtn.textContent = 'Cambiar Contraseña';
+            document.getElementById('id_password').value = '';
+        }
     }
-  }
 });
+    // Ajustar el sidebar al cambiar tamaño de pantalla
+    window.addEventListener("resize", function() {
+        if (window.innerWidth > 1024) {
+            sidebar.classList.remove("active");
+        }
+    });
+
+    // Mostrar/ocultar panel de administradores en móvil
+    showListBtn?.addEventListener('click', () => {
+        userListPanel.classList.add('active');
+    });
+
+    closePanelBtn?.addEventListener('click', () => {
+        userListPanel.classList.remove('active');
+    });
+
+    // Cerrar panel al hacer clic fuera en móvil
+    document.addEventListener('click', (e) => {
+        if (window.innerWidth <= 768) {
+            const isClickInside = userListPanel.contains(e.target) || 
+                                e.target.closest('.show-list-btn');
+            
+            if (!isClickInside && 
+                e.target.closest('.user-list-panel') === null && 
+                !e.target.closest('.show-list-btn')) {
+                userListPanel.classList.remove('active');
+            }
+        }
+    });
+
+    // Ajustar al cambiar tamaño de pantalla
+    window.addEventListener('resize', () => {
+        const userListPanel = document.querySelector('.user-list-panel');
+        if (window.innerWidth > 768) {
+            userListPanel.classList.remove('active');
+        }
+    });
+
+    // Manejar selección de administrador en la lista
+    userItems.forEach(item => {
+        item.addEventListener('click', function() {
+            // Remover selección previa
+            document.querySelectorAll('.user-item').forEach(i => {
+                i.classList.remove('selected');
+            });
+            
+            // Añadir selección actual
+            this.classList.add('selected');
+            selectedAdminId = this.dataset.id;
+            
+            // Cargar datos del administrador
+            loadAdminData(selectedAdminId);
+            
+            // Ocultar panel en móvil
+            if (window.innerWidth <= 768) {
+                userListPanel.classList.remove('active');
+            }
+        });
+    });
+
+    // Botón para mostrar/ocultar campo de contraseña
+    passwordBtn?.addEventListener('click', function() {
+        const passwordRow = document.querySelector('.password-row');
+        if (passwordRow.style.display === 'none' || passwordRow.style.display === '') {
+            passwordRow.style.display = 'flex';
+            this.textContent = 'Ocultar Contraseña';
+        } else {
+            passwordRow.style.display = 'none';
+            this.textContent = 'Cambiar Contraseña';
+            document.getElementById('id_password').value = '';
+        }
+    });
+
+    // Botón para añadir nuevo administrador
+    addBtn?.addEventListener('click', function() {
+        // Limpiar formulario
+        document.getElementById('admin-id').value = '';
+        document.getElementById('id_username').value = '';
+        document.getElementById('id_rol').value = 'administrador'; // Valor por defecto
+        document.getElementById('id_password').value = '';
+        
+        // Mostrar campo de contraseña
+        document.querySelector('.password-row').style.display = 'flex';
+        document.querySelector('.password-btn').textContent = 'Ocultar Contraseña';
+        
+        // Enfocar el primer campo
+        document.getElementById('id_username').focus();
+    });
+
+    // Botón para guardar cambios
+    saveBtn?.addEventListener('click', function(e) {
+        e.preventDefault();
+        saveAdmin();
+    });
+
+    // Función para cargar datos de un administrador
+async function loadAdminData(adminId) {
+    try {
+        const response = await fetch(`/get_admin_data/${adminId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Error al cargar datos');
+        }
+        
+        // Asignar valores a los campos del formulario
+        document.getElementById('admin-id').value = data.data.id;
+        document.getElementById('id_username').value = data.data.username;
+        
+        // Manejo del campo de rol
+        const rolSelect = document.getElementById('id_rol');
+        if (rolSelect) {
+            rolSelect.value = data.data.rol || 'usuario';
+        }
+        
+        // Ocultar campo de contraseña para ediciones
+        document.querySelector('.password-row').style.display = 'none';
+        document.querySelector('.password-btn').textContent = 'Cambiar Contraseña';
+    } catch (error) {
+        console.error("Error al cargar datos del admin:", error);
+        Swal.fire('Error', error.message || 'Error al cargar datos', 'error');
+    }
+}
+
+    // Función para guardar administrador
+async function saveAdmin() {
+    const formData = new FormData(document.querySelector('.user-details-panel'));
+    const adminId = formData.get('admin_id');
+    const url = adminId ? `/editar_admin/${adminId}/` : '/registrar_admin/';
+    
+    // Validación básica
+    if (!formData.get('username')) {
+        await Swal.fire('Error', 'El nombre de usuario es requerido', 'error');
+        return;
+    }
+    
+    if (!adminId && !formData.get('password')) {
+        await Swal.fire('Error', 'La contraseña es requerida para nuevos usuarios', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Error en la operación');
+        }
+        
+        await Swal.fire('Éxito', 'Cambios guardados correctamente', 'success');
+        window.location.reload();
+    } catch (error) {
+        console.error('Error:', error);
+        await Swal.fire('Error', error.message || 'Error al guardar los cambios', 'error');
+    }
+}    
+
+    // Botón para eliminar administrador
+   deleteBtn?.addEventListener('click', async function() {
+    if (!selectedAdminId) {
+        Swal.fire('Error', 'Seleccione un administrador primero', 'error');
+        return;
+    }
+
+    try {
+        const { isConfirmed } = await Swal.fire({
+            title: '¿Eliminar administrador?',
+            text: "Esta acción no se puede deshacer",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        });
+
+        if (!isConfirmed) return;
+
+        const response = await fetch(`/eliminar_admin/${selectedAdminId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({}) // Envía un cuerpo vacío pero válido
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Error al eliminar');
+        }
+        
+        await Swal.fire('¡Eliminado!', 'El administrador fue eliminado.', 'success');
+        window.location.reload();
+    } catch (error) {
+        console.error('Error:', error);
+        Swal.fire('Error', error.message || 'No se pudo eliminar', 'error');
+    }
 });
 
-// Ajustar al cambiar tamaño de pantalla
-window.addEventListener('resize', () => {
-  const userListPanel = document.querySelector('.user-list-panel');
-  if (window.innerWidth > 768) {
-    userListPanel.classList.remove('active');
-  }
+    // Búsqueda de administradores
+    searchInput?.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        document.querySelectorAll('.user-item').forEach(item => {
+            const username = item.querySelector('span').textContent.toLowerCase();
+            if (username.includes(searchTerm)) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    });
+
+    // Cerrar sesión
+    logoutIcon?.addEventListener('click', function() {
+        window.location.href = "{% url 'cerrarSession' %}";
+    });
+
+    // Manejar parámetros de URL para mostrar modal de añadir
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('showAddModal') === 'true') {
+        addBtn.click();
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // Verificación inicial del select de roles
+document.addEventListener("DOMContentLoaded", function() {
+    const rolSelect = document.getElementById('id_rol');
+    if (rolSelect) {
+        console.log('Opciones de rol disponibles:');
+        Array.from(rolSelect.options).forEach(option => {
+            console.log(`Valor: ${option.value}, Texto: ${option.text}`);
+        });
+    } else {
+        console.error('No se encontró el elemento id_rol');
+    }
+});
+const firstAdminItem = document.querySelector('.user-item[selected]') || 
+                          document.querySelector('.user-item');
+    if (firstAdminItem) {
+        firstAdminItem.click(); // Simula el click para cargar los datos
+    }
 });
      </script>
   </body>
