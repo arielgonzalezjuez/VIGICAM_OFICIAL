@@ -62,6 +62,15 @@ from rest_framework.response import Response
 
 from django.http import HttpResponseForbidden
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+import cv2
+import numpy as np
+import os
+from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
+
 def role_required(*allowed_roles):
     def decorator(view_func):
         def wrapped_view(request, *args, **kwargs):
@@ -117,8 +126,19 @@ def index(request):
     return render(request, 'index.html',{'user_rol': request.user.rol if request.user.is_authenticated else None})
 
 # Controla la página "Acerca de", gestionando los horarios laborales (crea defaults si no existen, permite edición para staff y agrupa días con mismos horarios) y mostrando la información organizada al usuario, renderizando 'about.html' con los horarios agrupados e individuales.
+from datetime import datetime
+from django.shortcuts import render, redirect
+from .models import HorarioEmpresa
+from .forms import TelegramForm
+
 @login_required
 def about(request):
+    print("Método HTTP:", request.method)
+
+    telegram_form = TelegramForm(instance=request.user)
+    show_telegram_form = False
+
+    # Crear horarios por defecto si no existen
     if not HorarioEmpresa.objects.exists():
         default_hours = {
             'LUN': ('08:00', '18:00', False),
@@ -129,7 +149,7 @@ def about(request):
             'SAB': ('09:00', '14:00', False),
             'DOM': ('00:00', '00:00', True)
         }
-        
+
         for dia, (apertura, cierre, cerrado) in default_hours.items():
             HorarioEmpresa.objects.create(
                 dia=dia,
@@ -137,17 +157,56 @@ def about(request):
                 cierra=datetime.strptime(cierre, '%H:%M').time() if not cerrado else None,
                 cerrado=cerrado
             )
-    
-    # Diccionario para orden personalizado
+
+    if request.method == 'POST' and request.user.is_authenticated:
+        print("Datos POST recibidos:", request.POST)
+
+        # Procesar formulario de horarios
+        if 'guardar_horarios' in request.POST or any(k.startswith('horario_') for k in request.POST):
+            print("Procesando formulario de horarios...")
+            for dia in ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']:
+                prefix = f"horario_{dia}"
+                cerrado = f"{prefix}_cerrado" in request.POST
+                try:
+                    horario = HorarioEmpresa.objects.get(dia=dia)
+                except HorarioEmpresa.DoesNotExist:
+                    horario = HorarioEmpresa(dia=dia)
+
+                if cerrado:
+                    horario.cerrado = True
+                    horario.abre = None
+                    horario.cierra = None
+                else:
+                    hora_apertura = request.POST.get(f"{prefix}_abre") or '08:00'
+                    hora_cierre = request.POST.get(f"{prefix}_cierra") or '18:00'
+                    horario.abre = datetime.strptime(hora_apertura, '%H:%M').time()
+                    horario.cierra = datetime.strptime(hora_cierre, '%H:%M').time()
+                    horario.cerrado = False
+
+                horario.actualizado_por = request.user
+                horario.save()
+
+            return redirect('about')
+
+        # Procesar formulario de Telegram
+        elif 'telegram_form' in request.POST:
+            telegram_form = TelegramForm(request.POST, instance=request.user)
+            if telegram_form.is_valid():
+                telegram_form.save()
+                return redirect('about')
+            show_telegram_form = True
+
+        elif 'edit_telegram' in request.POST:
+            show_telegram_form = True
+
+    # Preparar datos para mostrar
     dia_order = {'LUN': 0, 'MAR': 1, 'MIE': 2, 'JUE': 3, 'VIE': 4, 'SAB': 5, 'DOM': 6}
-    
-    # Ordenar los horarios según el orden de la semana
     horarios = HorarioEmpresa.objects.all()
-    horarios_ordenados = sorted(horarios, key=lambda x: dia_order[x.dia])
-    
+    horarios_ordenados = sorted(horarios, key=lambda x: dia_order.get(x.dia, 7))
+
     grouped_horarios = []
     current_group = None
-    
+
     for horario in horarios_ordenados:
         if current_group is None:
             current_group = {
@@ -159,14 +218,14 @@ def about(request):
                 'cerrado': horario.cerrado
             }
         else:
-            # Comparación segura que maneja None
             same_schedule = (
                 (horario.abre == current_group['abre'] or 
-                 (horario.abre is None and current_group['abre'] is None)) and \
+                 (horario.abre is None and current_group['abre'] is None)) and
                 (horario.cierra == current_group['cierra'] or 
-                 (horario.cierra is None and current_group['cierra'] is None)) and \
-                (horario.cerrado == current_group['cerrado']))
-                
+                 (horario.cierra is None and current_group['cierra'] is None)) and
+                (horario.cerrado == current_group['cerrado'])
+            )
+
             if same_schedule:
                 current_group['dias'].append(horario)
                 current_group['last_day_name'] = horario.get_dia_display()
@@ -180,47 +239,10 @@ def about(request):
                     'cierra': horario.cierra,
                     'cerrado': horario.cerrado
                 }
-    
+
     if current_group is not None:
         grouped_horarios.append(current_group)
-    
-    if request.method == 'POST' and request.user.is_authenticated:
-        if 'horario_LUN_cerrado' in request.POST:  # Asumiendo que es el formulario de horarios
-            for dia in ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']:
-                horario = HorarioEmpresa.objects.get(dia=dia)
-                prefix = f"horario_{dia}"
-            
-                cerrado = f"{prefix}_cerrado" in request.POST
-            
-                if cerrado:
-                    horario.cerrado = True
-                    horario.abre = None
-                    horario.cierra = None
-                else:
-                    hora_apertura = request.POST.get(f"{prefix}_abre", '08:00')
-                    hora_cierre = request.POST.get(f"{prefix}_cierra", '18:00')
-                
-                    horario.cerrado = False
-                    horario.abre = datetime.strptime(hora_apertura, '%H:%M').time()
-                    horario.cierra = datetime.strptime(hora_cierre, '%H:%M').time()
-            
-                horario.actualizado_por = request.user
-                horario.save()
-            
-            return redirect('about')
-        elif 'telegram_form' in request.POST:
-            telegram_form = TelegramForm(request.POST, instance=request.user)
-            if telegram_form.is_valid():
-                telegram_form.save()
-                return redirect('about')
-            show_telegram_form = True
-        elif 'edit_telegram' in request.POST:
-            show_telegram_form = True
-            telegram_form = TelegramForm(instance=request.user)
-    else:
-        telegram_form = TelegramForm(instance=request.user)
-        show_telegram_form = False
-    
+
     return render(request, 'about.html', {
         'grouped_horarios': grouped_horarios,
         'horarios': horarios_ordenados,
@@ -228,6 +250,7 @@ def about(request):
         'show_telegram_form': show_telegram_form,
         'is_authenticated': request.user.is_authenticated
     })
+
 
 def inicio_sesion(request):
     if request.method == 'GET':
@@ -1323,7 +1346,7 @@ def schedule_telegram_notification(camera_name, absolute_path, mensaje):
         # Determinar el intervalo de espera
         last_sent = notification_timers.get(camera_name, {}).get("last_sent")
         elapsed = datetime.now() - last_sent if last_sent else None
-        delay = 0 if (not last_sent or elapsed > timedelta(minutes=5)) else 300
+        delay = 0 if (not last_sent or elapsed > timedelta(minutes=1)) else 300
         print(f"Intentando enviar notificación inmediata para {camera_name}")
         # Crear temporizador
         timer = threading.Timer(
@@ -1339,9 +1362,15 @@ def schedule_telegram_notification(camera_name, absolute_path, mensaje):
         }
 
 def enviar_notificacion_personalizada(imagen_path, mensaje):
-    print(f"Intentando enviar notificación con imagen: {imagen_path}")
-    usuarios = Cliente.objects.exclude(telegram_chat_id__isnull=True).exclude(telegram_chat_id__exact='')
+    print(f"📸 Intentando enviar notificación con imagen: {imagen_path}")
     
+    if not os.path.exists(imagen_path):
+        print("❌ La imagen no existe en la ruta especificada")
+        return False
+
+    usuarios = Cliente.objects.exclude(telegram_chat_id__isnull=True).exclude(telegram_chat_id__exact='')
+    print(f"👥 Usuarios con chat_id: {usuarios.count()}")
+
     if not usuarios.exists():
         print("❌ No hay usuarios con chat_id registrado")
         return False
@@ -1359,31 +1388,30 @@ def enviar_notificacion_personalizada(imagen_path, mensaje):
     for usuario in usuarios:
         try:
             url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendPhoto"
-            print(url)
             with open(imagen_path, 'rb') as foto:
                 files = {'photo': foto}
-                print(usuario.telegram_chat_id)
                 data = {
                     'chat_id': usuario.telegram_chat_id,
                     'caption': mensaje[:1024],
                     'parse_mode': 'Markdown'
                 }
                 response = session.post(url, files=files, data=data, timeout=10)
-                response = requests.post(url, files={'photo': foto}, data={
-                    'chat_id': usuario.telegram_chat_id,
-                    'caption': mensaje
-                })
-                print(response.json())
-                print('ENVIANDO')
+                
+                print(f"📨 Respuesta Telegram ({usuario.telegram_chat_id}): {response.status_code} - {response.text}")
+
                 if response.status_code == 200:
                     resultados.append(True)
                 else:
                     resultados.append(False)
-                    
+
         except Exception as e:
+            print(f"❌ Error enviando a {usuario.nombre}: {str(e)}")
             resultados.append(False)
-    
-    return any(resultados)
+
+    enviado = any(resultados)
+    print(f"✅ Notificación enviada: {enviado}")
+    return enviado
+
 
 def send_telegram_notification(absolute_path, mensaje, camera_name):
     try:
@@ -1667,17 +1695,7 @@ def video_feed_flexible(request, camera_id):
         return StreamingHttpResponse(
             robust_video_gen(camera_id),
             content_type='multipart/x-mixed-replace; boundary=frame'
-        )
-    
-
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-import cv2
-import numpy as np
-import os
-from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt 
+        ) 
 
 @csrf_exempt 
 @api_view(['POST'])
