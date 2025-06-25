@@ -1,39 +1,68 @@
 @echo off
-:: Configuración de la ventana
-title Iniciando Servidor Django
+:: Configuración indestructible para Django
+title SERVIDOR DJANGO - [NO CERRAR]
 color 0A
 cls
 
-:: Verificar requisitos
+:: 1. Verificación mejorada de Python y Django
 where python >nul 2>nul || (
-    echo Error: Python no está instalado o no está en el PATH.
-    echo Descárgalo desde: https://www.python.org/downloads/
+    echo [ERROR] Python no encontrado en el PATH
+    echo Instale Python y marque "Add to PATH"
     pause
     exit /b
 )
 
 if not exist "manage.py" (
-    echo Error: No se encontró manage.py. Ejecuta primero install.bat.
+    echo [ERROR] Ejecute desde la raíz del proyecto Django
     pause
     exit /b
 )
 
-:: Activar entorno virtual si existe
-if exist "venv\Scripts\activate" call venv\Scripts\activate
+:: 2. Activación de entorno virtual con verificación
+if exist "venv\Scripts\activate" (
+    call venv\Scripts\activate
+    python -c "print('>> Entorno virtual ACTIVADO')" || (
+        echo [ERROR] Fallo al activar el entorno
+        pause
+        exit /b
+    )
+)
 
-:: Iniciar servidor y abrir navegador
-echo Iniciando servidor de Django...
-echo -------------------------------
-echo URL: http://127.0.0.1:8000/
-echo -------------------------------
-echo Presiona CTRL+C en esta ventana para detener el servidor.
+:: 3. Migraciones automáticas con feedback
+echo Aplicando migraciones...
+python manage.py migrate --noinput && (
+    echo [OK] Migraciones aplicadas
+) || (
+    echo [ERROR] Fallo en migraciones
+    pause
+    exit /b
+)
+
+echo Verificando superusuario...
+python crear_superusuario.py || (
+    echo [AVISO] Error al verificar usuario
+    echo Ejecute manualmente: python manage.py createsuperuser
+)
+
+
+:: 5. Inicio INDEPENDIENTE del servidor
+echo Iniciando servidor Django...
+echo ==============================
+echo URL: http://localhost:8000
+echo Credenciales: root / root
+echo ==============================
 echo.
 
-start "" python manage.py runserver
+:: Método infalible para mantener el servidor corriendo
+start "Django Server" /B cmd /c "python manage.py runserver && pause"
 
-:: Esperar 3 segundos y abrir navegador
-timeout /t 3 /nobreak >nul
-start "" "http://127.0.0.1:8000/"
+:: Espera segura antes de abrir navegador
+timeout /t 8 /nobreak >nul
 
-:: Mantener la ventana abierta para ver logs
+:: Abrir navegador sólo si el servidor está activo
+tasklist | find "python.exe" >nul && (
+    start "" "http://localhost:8000"
+)
+
+:: Mantener esta ventana abierta
 pause

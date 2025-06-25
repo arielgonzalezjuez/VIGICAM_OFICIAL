@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os 
 import tzlocal
+import psycopg2
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -79,11 +80,20 @@ WSGI_APPLICATION = 'configuraciones.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'db_vigi_cam',
+        'USER': 'postgres',
+        'PASSWORD': 'postgresql',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
+# Optimización para PostgreSQL
+OPTIONS = {
+    'options': '-c search_path=public,my_schema',
+    'isolation_level': psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED,
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
