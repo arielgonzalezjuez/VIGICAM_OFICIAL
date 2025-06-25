@@ -24,8 +24,8 @@ Sistema avanzado de control de acceso mediante reconocimiento facial con notific
 ## 🛠 Instalación Paso a Paso
 
 ### 1️⃣ Descargar el proyecto
-1. Haz clic en `Code` → `Download ZIP` [en GitHub](https://github.com/tuusuario/vigi_cam)
-2. Guarda el archivo `VigiCam-main.zip` en tu carpeta de documentos
+1. Haz clic en `Code` → `Download ZIP` [en GitHub](https://github.com/arielgonzalezjuez/VIGICAM_OFICIAL.git)
+2. Guarda el archivo `VIGICAM_OFICIAL-main.zip` en tu carpeta de documentos
 3. Extraer archivo donde desee
 
 ### 2️⃣ Configurar PostgreSQL 
