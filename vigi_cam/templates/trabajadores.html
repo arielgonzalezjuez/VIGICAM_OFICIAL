@@ -2205,11 +2205,13 @@ function checkEmptyState() {
   const hasWorkers = tableRows.length > 1 || 
                     (tableRows.length === 1 && !tableRows[0].querySelector('.no-records'));
   
+const isAdmin = tableAddButton.disabled === false;
+
   [editButton, deleteButton].forEach(button => {
     if (button) {
-      button.disabled = !hasWorkers;
-      button.style.opacity = hasWorkers ? 1 : 0.5;
-      button.style.cursor = hasWorkers ? 'pointer' : 'not-allowed';
+      button.disabled = !hasWorkers || !isAdmin;
+      button.style.opacity = (hasWorkers && isAdmin) ? 1 : 0.5;
+      button.style.cursor = (hasWorkers && isAdmin) ? 'pointer' : 'not-allowed';
     }
   });
   
@@ -2433,22 +2435,6 @@ document.querySelectorAll('#add_nombre, #edit_nombre, #add_cargo, #edit_cargo').
   });
 });
    </script>
-   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-  // Deshabilitar botones
-  document.getElementById('tableAddButton').disabled = true;
-  document.getElementById('editButton').disabled = true;
-  document.getElementById('deleteButton').disabled = true;
   
-  // También puedes cambiar su estilo para que parezcan deshabilitados
-  const buttons = ['tableAddButton', 'editButton', 'deleteButton'];
-  buttons.forEach(id => {
-    const button = document.getElementById(id);
-    if (button) {
-      button.style.opacity = '0.5';
-      button.style.cursor = 'not-allowed';
-    }
-  });
-});</script>
   </body>
 </html>

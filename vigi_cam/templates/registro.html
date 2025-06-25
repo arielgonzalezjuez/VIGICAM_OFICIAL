@@ -2111,10 +2111,11 @@ async function handleDeleteSelected() {
   // Utilidades
   function checkRecordsAvailability() {
     const hasRecords = document.querySelectorAll('tbody tr[data-id]').length > 0;
+    const isAdmin =  = deleteButtons.disabled === false;
     deleteButtons.forEach(btn => {
-      btn.disabled = !hasRecords;
-      btn.style.opacity = hasRecords ? 1 : 0.5;
-      btn.style.cursor = hasRecords ? 'pointer' : 'not-allowed';
+      btn.disabled = !hasRecords || !isAdmin;
+      btn.style.opacity = (hasRecords && isAdmin) ? 1 : 0.5;
+      btn.style.cursor = (hasRecords && isAdmin) ? 'pointer' : 'not-allowed';
     });
   }
 
