@@ -31,7 +31,6 @@ Sistema avanzado de control de acceso mediante reconocimiento facial con notific
 ### 2️⃣ Configurar PostgreSQL 
 🖱️ Ejecuta pgAdmin 4 desde el menú Inicio
 🔍 Navega a:
-text
 Servers → PostgreSQL 15 → Databases
 🛠️ Haz clic derecho → Create → Database...
 📝 Completa los campos:
